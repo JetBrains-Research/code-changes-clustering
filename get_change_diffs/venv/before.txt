@@ -1,0 +1,14 @@
+        super.dispatchDraw(canvas);
+        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Over)
+            rippleDrawable.draw(canvas);
+        if (insetColor != 0) {
+            paint.setColor(insetColor);
+            paint.setAlpha(255);
+            if (insetLeft != 0)
+                canvas.drawRect(0, 0, insetLeft, getHeight(), paint);
+            if (insetTop != 0)
+                canvas.drawRect(0, 0, getWidth(), insetTop, paint);
+            if (insetRight != 0)
+                canvas.drawRect(getWidth() - insetRight, 0, getWidth(), getHeight(), paint);
+            if (insetBottom != 0)
+                canvas.drawRect(0, getHeight() - insetBottom, getWidth(), getHeight(), paint);

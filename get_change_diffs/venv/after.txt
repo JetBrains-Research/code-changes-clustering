@@ -1,0 +1,12 @@
+        if (cornerRadius &gt; 0 && !drawCalled && getWidth() &gt; 0 && getHeight() &gt; 0 && Build.VERSION.SDK_INT &lt;= Build.VERSION_CODES.KITKAT_WATCH) {
+            int saveCount = canvas.saveLayer(0, 0, getWidth(), getHeight(), null, Canvas.ALL_SAVE_FLAG);
+
+            internalDispatchDraw(canvas);
+
+            paint.setXfermode(pdMode);
+            canvas.drawPath(cornersMask, paint);
+
+            canvas.restoreToCount(saveCount);
+            paint.setXfermode(null);
+        } else {
+            internalDispatchDraw(canvas);

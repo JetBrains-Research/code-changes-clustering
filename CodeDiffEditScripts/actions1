@@ -1,0 +1,16 @@
+25@@ | 1072 | 25 | INS 25@@ to 8@@ at 1
+38@@! | 1059 | 38 | INS 38@@! to 25@@ at 0
+8@@ | 1071 | 8 | INS 8@@ to 25@@ at 1
+32@@ | 1058 | 32 | INS 32@@ to 38@@! at 0
+21@@ | 1039 | 21 | MOV 21@@ to 8@@ at 0
+42@@isPrivate | 1057 | 42 | INS 42@@isPrivate to 32@@ at 0
+32@@ | 1063 | 32 | INS 32@@ to 32@@ at 2
+42@@token | 1032 | 42 | UPD 42@@token from token to getName
+42@@token | 1032 | 42 | MOV 42@@token to 32@@ at 0
+
+25@@ | 312 | 25 | INS 25@@ to 8@@ at 1
+38@@! | 298 | 38 | INS 38@@! to 25@@ at 0
+8@@ | 311 | 8 | INS 8@@ to 25@@ at 1
+32@@ | 297 | 32 | INS 32@@ to 38@@! at 0
+21@@ | 261 | 21 | MOV 21@@ to 8@@ at 0
+42@@isPrivate | 296 | 42 | INS 42@@isPrivate to 32@@ at 0

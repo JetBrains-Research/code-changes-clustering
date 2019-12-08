@@ -1,0 +1,8 @@
+	public void addChannel(Channel channel) {
+		if (!token.equals(channel.getName()) && !subChannels.containsKey(channel.getName())) {
+			subChannels.put(channel.getName(), channel);
+			if (!isPrivate()) {
+				OOCSIServer.logConnection(token, channel.getName(), "added channel", new Date());
+			}
+		}
+	}
