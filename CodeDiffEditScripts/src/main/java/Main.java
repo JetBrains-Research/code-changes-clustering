@@ -26,7 +26,7 @@ public class Main {
     public static Map<String, ArrayList<String>> ngrams_locations_as_sub = new HashMap<>();
     public static Map<String, ArrayList<String>> ngrams_locations_full = new HashMap<>();
     public static int num_changes = 0;
-    public static int NUM_ACTIONS_THRESHOLD = 400;
+    public static int NUM_ACTIONS_THRESHOLD = 100;
 
     public static void dfs(ITree node) {
         List<ITree> children = node.getChildren();
@@ -61,7 +61,12 @@ public class Main {
      * @param end end position of code fragment
      * @return min node which covers the fragment
      */
+    // TODO: change loop to range-based; add new scopes to get less trees.
     public static ITree findMinCoverNode(ITree node, int start, int end) {
+        //System.out.println("NEW CALL");
+        //System.out.println(node.getHash());
+        //System.out.println(node.hashCode());
+
         int node_start = node.getPos();
         int node_end = node.getEndPos();
 
@@ -71,13 +76,19 @@ public class Main {
 
         //List<ITree> children = node.getChildren();
 
-
-        for (ITree child : node.getChildren()) {
-            ITree res = findMinCoverNode(child, start, end);
+        int num_children = node.getChildren().size();
+        for (int i = 0; i < num_children; i++) {
+            //System.out.println("INSIDE");
+            //System.out.println(node.getChild(i).getHash());
+            //System.out.println(node.getChild(i).hashCode());
+            ITree res = findMinCoverNode(node.getChild(i), start, end);
             if (res != null) {
                 return res;
             }
         }
+
+        //Map<String, String> mp = new HashMap<>();
+        //mp.get("dfgh");
 
         return node;
     }
@@ -150,7 +161,7 @@ public class Main {
         return true;
     }
 
-    public static String getOnlyBlackChanges(String fragment) {
+    public static String getOnlyBlackChanges1(String fragment) {
         String[] lines = fragment.split("\n");
         int start = -1;
         int end = -1;
@@ -177,26 +188,453 @@ public class Main {
         return String.join("\n", extractedLines);
     }
 
-    public static void mainCheckGetOnlyBlackChanges(String[] args) {
-        String s = "            ExcerptTailer sourceTailer = s.createTailer();\n" +
-                "\n" +
-                "            final RollingChronicleQueue t =\n" +
-                "                    <a id=\"change\">binary(</a>target<a id=\"change\">)</a>\n" +
-                "                            .<a id=\"change\">testBlockSize()</a>\n" +
-                "                            .build();\n" +
-                "\n" +
-                "            ExcerptAppender appender = t.acquireAppender();";
+    public static String getOnlyBlackChanges2(String fragment) {
+        int start = fragment.indexOf("<a id=\"change\">") + "<a id=\"change\">".length();
+        int end = fragment.lastIndexOf("</a>");
 
-        System.out.println(getOnlyBlackChanges(s));
+        return fragment.substring(start, end)
+                .replace("<a id=\"change\">", "")
+                .replace("</a>", "");
+    }
+
+    static class Indices {
+        int start;
+        int end;
+
+        Indices(int start, int end) {
+            this.start = start;
+            this.end = end;
+        }
+    }
+
+    public static int numberOfOccurrences(String str, String substr) {
+        int lastIndex = 0;
+        int count = 0;
+
+        while(lastIndex != -1){
+
+            lastIndex = str.indexOf(substr, lastIndex);
+
+            if(lastIndex != -1){
+                count ++;
+                lastIndex += substr.length();
+            }
+        }
+
+        return count;
+    }
+
+
+    /**
+     * Gets indices of substring of fragment which starts and ends with highlighted tokens.
+     * @param file
+     * @param fragment
+     * @return
+     */
+    // TODO: embed this function to the main code.
+    public static Indices getCorrectIndices(String file, String fragment) {
+        String startTag = "<a id=\"change\">";
+        String endTag = "</a>";
+
+        //System.out.println("\n\nFRAGMENT");
+        //System.out.println(fragment);
+
+        String notHighlighted = fragment
+                .replace(startTag, "")
+                .replace(endTag, "");
+
+        int startFragment = file.indexOf(notHighlighted);
+
+        System.out.println("\n______________________NUMBER OF FRAGMENT OCCURENCES: " + numberOfOccurrences(file, notHighlighted) + "\n");
+
+        if (startFragment == -1) {
+            return null;
+        }
+
+        int startHighlighted = fragment.indexOf(startTag);
+        int start = startFragment + startHighlighted;
+
+        int endHighlighted = fragment.lastIndexOf(endTag) + endTag.length();
+        int end = startFragment + endHighlighted - numberOfOccurrences(fragment, startTag) * startTag.length()
+                - numberOfOccurrences(fragment, endTag) * endTag.length();
+
+        //System.out.println(fragment.substring(startHighlighted, endHighlighted));
+        //System.out.println(numberOfOccurrences(fragment, startTag));
+        //System.out.println(numberOfOccurrences(fragment, endTag));
+
+        System.out.println(file.substring(start, end));
+
+        return new Indices(start, end);
+    }
+
+    public static void main(String[] args) throws IOException, GitAPIException {
+        Run.initGenerators();
+
+        TreeContext treeContext = null;
+
+        File patternsDir = new File(PATTERNS_PATH);
+        File[] size_dirs = Arrays.stream(patternsDir.listFiles()).filter(file -> isNumeric(file.getName())).toArray(File[]::new);
+        Arrays.sort(size_dirs, Comparator.comparingInt(o -> Integer.parseInt(o.getName())));
+
+        //int num_changes = 0;
+        boolean if_break = false;
+
+        for (File size_dir : size_dirs) {
+            if (if_break) {
+                break;
+            }
+
+            if (size_dir.getName().equals("40")) {
+                break;
+            }
+
+            File[] id_dirs = Arrays.stream(size_dir.listFiles()).filter(file -> isNumeric(file.getName())).toArray(File[]::new);
+            Arrays.sort(id_dirs, Comparator.comparingInt(o -> Integer.parseInt(o.getName())));
+
+            for (File id_dir : id_dirs) {
+                /*if (id_dir.getName().equals("16")) {
+                    if_break = true;
+                    break;
+                }*/
+
+                if (if_break) {
+                    break;
+                }
+
+                File[] files = id_dir.listFiles();
+
+                for (File file : files) {
+                    if (if_break) {
+                        break;
+                    }
+
+                    /*if (file.getName().startsWith("sampleChange3")) {
+                        if_break = true;
+                        break;
+                    }*/
+
+                    if (!file.getName().startsWith("sampleChange") || file.getName().equals("sampleChange.html")) {
+                        continue;
+                    }
+
+                    System.out.println("\n\n\n" + size_dir.getName() + " " + id_dir.getName());
+                    System.out.println("FILE: " + file.getName());
+
+                    String content = readAllBytesJava7(file.getAbsolutePath());
+                    int startInd = content.indexOf("<html><h3>") + "<html><h3>".length();
+                    int endInd = content.indexOf("</h3><h3>");
+
+                    String name = content.substring(startInd, endInd);
+                    String[] parts = name.split(",");
+                    String repoName = parts[parts.length - 1].trim();
+                    String commitName = parts[0];
+                    String fileName = parts[1];
+
+                    GitConnector gc = new GitConnector(REPOS_PATH + "/" + repoName + "/.git");
+                    System.out.println(REPOS_PATH + "/" + repoName + "/.git");
+                    ArrayList<String> afterAndBefore = null;
+
+                    if (gc.connect()) {
+                        afterAndBefore = gc.getFileFromCommit(commitName, fileName);
+                        gc.close();
+                    } else {
+                        System.out.println("GitConnector is not connected");
+                    }
+
+                    String afterContent = afterAndBefore.get(0).replace("\t", "    ");
+                    String beforeContent = afterAndBefore.get(1).replace("\t", "    ");
+
+                    File file_before = new File("tmp/file_before.java");
+                    file_before.createNewFile();
+                    try (PrintWriter out = new PrintWriter(file_before.getAbsolutePath())) {
+                        out.print(beforeContent);
+                    }
+                    ITree src = null;
+                    TreeContext treeSrc = null;
+                    try {
+                        treeSrc = Generators.getInstance().getTree(file_before.getPath());
+                        src = treeSrc.getRoot();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        continue;
+                    }
+
+                    if (treeContext == null) {
+                        treeContext = treeSrc;
+                    }
+
+                    File file_after = new File("tmp/file_after.java");
+                    file_after.createNewFile();
+                    try (PrintWriter out = new PrintWriter(file_after.getAbsolutePath())) {
+                        out.print(afterContent);
+                    }
+                    ITree dst = null;
+                    TreeContext treeDst = null;
+                    try {
+                        treeDst = Generators.getInstance().getTree(file_after.getPath());
+                        dst = treeDst.getRoot();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        continue;
+                    }
+
+                    ArrayList<String> beforeAndAfterFragments = null;
+                    beforeAndAfterFragments = getFragments(content);
+
+                    Indices indicesBefore = getCorrectIndices(beforeContent, beforeAndAfterFragments.get(0));
+                    Indices indicesAfter = getCorrectIndices(afterContent, beforeAndAfterFragments.get(1));
+
+                    if (indicesBefore == null || indicesAfter == null) {
+                        if_break = true;
+                        break;
+                    }
+
+                    //System.out.println(beforeContent.substring(indicesBefore.start, indicesBefore.end));
+
+                    ITree beforeNode = findMinCoverNode(src, indicesBefore.start, indicesBefore.end);
+                    if (beforeNode == null) {
+                        System.out.println("beforeNode is NULL " + file.getName());
+                        //if_break = true;
+                        //break;
+                        continue;
+                    }
+
+                    ITree afterNode = findMinCoverNode(dst, indicesAfter.start, indicesAfter.end);
+                    if (afterNode == null) {
+                        System.out.println("afterNode is NULL " + file.getName());
+                        //if_break = true;
+                        //break;
+                        continue;
+                    }
+
+                    try (PrintWriter out = new PrintWriter("tmp/before_node")) {
+                        out.print(beforeNode.toTreeString());
+                    }
+
+                    try (PrintWriter out = new PrintWriter("tmp/after_node")) {
+                        out.print(afterNode.toTreeString());
+                    }
+
+                    try (PrintWriter out = new PrintWriter("tmp/src_tree")) {
+                        out.print(src.toTreeString());
+                    }
+                    try (PrintWriter out = new PrintWriter("tmp/dst_tree")) {
+                        out.print(dst.toTreeString());
+                    }
+
+                    //System.out.println(treeContext.getTypeLabel(32));
+
+                    //System.out.println("BEFORE DEPTH: " + beforeNode.getDepth());
+                    //System.out.println("AFTER DEPTH: " + afterNode.getDepth());
+
+                    // Match
+                    Matcher m = Matchers.getInstance().getMatcher(src, dst); // retrieve the default matcher
+                    try {
+                        m.match();
+                    } catch (NullPointerException e) {
+                        System.out.println("Cannot match: NullPointerException in m.match()");
+
+                        //System.out.println(beforeNode.toTreeString());
+                        //System.out.println("BEFORE DEPTH: " + beforeNode.getDepth());
+                        //System.out.println("_________");
+                        //System.out.println(afterNode.toTreeString());
+                        //System.out.println("AFTER DEPTH: " + afterNode.getDepth());
+
+                        if_break = true;
+                        break;
+                    }
+
+                    ActionGenerator allFileGen = new ActionGenerator(src, dst, m.getMappings());
+                    allFileGen.generate();
+
+                    /*if (id_dir.getName().equals("10") && file.getName().startsWith("sampleChange6")) {
+                        System.out.println("CHECKING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                        checkingAllTree(src, m, beforeContent, afterContent);
+                    }*/
+
+                    //System.out.println(treeSrc.getTypeLabel(42));
+
+                    BeforeAfterNodes nodes = getBeforeAfterNodes(m,
+                            indicesBefore.start, indicesBefore.end, indicesAfter.start, indicesAfter.end,
+                            beforeContent, afterContent);
+
+                    ITree nodeBefore = nodes.before;
+                    ITree nodeAfter = nodes.after;
+                    ITree nodeBeforeRaw = nodes.rawBefore;
+                    ITree nodeAfterRaw = nodes.rawAfter;
+
+                    Matcher fragmentsMatcher = Matchers.getInstance().getMatcher(nodeBefore, nodeAfter);
+                    fragmentsMatcher.match();
+
+                    System.out.println(nodeBefore.toTreeString());
+                    System.out.println("________________");
+                    System.out.println(nodeAfter.toTreeString());
+                    System.out.println("\n________ANOTHER REPRESENTATION________\n");
+                    //System.out.println(nodeBefore.toPrettyString(treeContext));
+                    //System.out.println("________________");
+                    //System.out.println(nodeAfter.toPrettyString(treeContext));
+
+                    //ActionGenerator g = new ActionGenerator(nodeBefore, nodeAfter, m.getMappings());
+                    ActionGenerator g = new ActionGenerator(nodeBefore, nodeAfter, fragmentsMatcher.getMappings());
+                    g.generate();
+                    List<Action> actions = g.getActions();
+
+                    //TreeContext treeContext = new TreeContext();
+                    //System.out.println(treeContext.getTypeLabel(42));
+
+                    System.out.println("______________________________________");
+                    System.out.println("ACTIONS SIZE");
+                    System.out.println(actions.size());
+
+                    /*if (actions.size() > NUM_ACTIONS_THRESHOLD) {
+                        if_break = true;
+                        break;
+                        //continue;
+                    }*/
+
+                    //ActionGenerator allFileGen = new ActionGenerator(src, dst, m.getMappings());
+                    //allFileGen.generate();
+                    List<Action> allActions = allFileGen.getActions();
+                    List<Action> extractedActions = extractActions(allActions, nodeBefore, nodeAfter);
+                    List<Action> extractedActionsRaw = extractActions(allActions, nodeBeforeRaw, nodeAfterRaw);
+
+                    try {
+                        System.out.println("\nActions retrieved in the first way:");
+                        for (Action action : actions) {
+                            /*System.out.println(action.getNode().toPrettyString(treeDst) + " | " +
+                                    action.getNode().getId() + " | " + action.getNode().getType() + " | " + action.format(treeSrc));*/
+                            System.out.println(action.toString());
+                            //System.out.println(action.format(treeSrc));
+                            //System.out.println(action.getNode().toTreeString());
+                            //System.out.println(action.getName() + " " + action.getNode().toShortString());
+                        }
+
+                        System.out.println("\nActions retrieved in the second way:");
+                        for (Action action : extractedActions) {
+                            /*System.out.println(action.getNode().toPrettyString(treeDst) + " | " +
+                                    action.getNode().getId() + " | " + action.getNode().getType() + " | " + action.format(treeSrc));*/
+                            System.out.println(action.toString());
+                            //System.out.println(action.format(treeSrc));
+                            //System.out.println(action.getNode().toTreeString());
+                            //System.out.println(action.getName() + " " + action.getNode().toShortString());
+                        }
+
+                        System.out.println("\nActions retrieved in the third (raw) way:");
+                        for (Action action : extractedActionsRaw) {
+                            /*System.out.println(action.getNode().toPrettyString(treeDst) + " | " +
+                                    action.getNode().getId() + " | " + action.getNode().getType() + " | " + action.format(treeSrc));*/
+                            System.out.println(action.toString());
+                            //System.out.println(action.format(treeSrc));
+                            //System.out.println(action.getNode().toTreeString());
+                            //System.out.println(action.getName() + " " + action.getNode().toShortString());
+                        }
+
+                    } catch (NullPointerException e) {
+                        System.out.println("NullPointerException in printing actions");
+
+                        System.out.println("\nActions retrieved in the second way:");
+                        for (Action action : extractedActions) {
+                            /*System.out.println(action.getNode().toPrettyString(treeDst) + " | " +
+                                    action.getNode().getId() + " | " + action.getNode().getType() + " | " + action.format(treeSrc));*/
+                            System.out.println(action.toString());
+                            //System.out.println(action.format(treeSrc));
+                            //System.out.println(action.getNode().toTreeString());
+                            //System.out.println(action.getName() + " " + action.getNode().toShortString());
+                        }
+
+                        System.out.println("\nActions retrieved in the third (raw) way:");
+                        for (Action action : extractedActionsRaw) {
+                            /*System.out.println(action.getNode().toPrettyString(treeDst) + " | " +
+                                    action.getNode().getId() + " | " + action.getNode().getType() + " | " + action.format(treeSrc));*/
+                            System.out.println(action.toString());
+                            //System.out.println(action.format(treeSrc));
+                            //System.out.println(action.getNode().toTreeString());
+                            //System.out.println(action.getName() + " " + action.getNode().toShortString());
+                        }
+
+                        if_break = true;
+                        break;
+                        //continue;
+                    }
+
+                    num_changes++;
+                    addNgramsToSet(actions, size_dir.getName() + " " + id_dir.getName() + " " + file.getName());
+
+                    /*if (size_dir.getName().equals("3") && id_dir.getName().equals("1") && file.getName().equals("sampleChange3.html")) {
+                        System.out.println(nodeBefore.toTreeString());
+                        System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                        System.out.println(nodeAfter.toTreeString());
+                        if_break = true;
+                        break;
+                    }*/
+
+
+                    /*if (id_dir.getName().equals("10") && file.getName().startsWith("sampleChange6")) {
+                        if_break = true;
+                        break;
+                    }*/
+                }
+            }
+
+        }
+
+        System.out.println("\n\n\nNUM CHANGES: " + num_changes);
+
+        printHist(treeContext);
+    }
+
+    private static List<Action> extractActions(List<Action> allActions, ITree nodeBefore, ITree nodeAfter) {
+        List<Action> resultActions = new ArrayList<>();
+
+        Set<ITree> setBefore = new HashSet<>(nodeBefore.getTrees());
+        Set<ITree> setAfter = new HashSet<>(nodeAfter.getTrees());
+
+        //System.out.println("DESCENDANTS: \n" + nodeAfter.getTrees().size());
+
+        for (Action action : allActions) {
+            //System.out.println("ACTION: " + action.toString());
+            //System.out.println(action.getNode().toTreeString());
+
+            ITree nodeOfAction = action.getNode();
+            /*if (nodeBefore.getPos() <= nodeOfAction.getPos() && nodeOfAction.getEndPos() <= nodeBefore.getEndPos()) {
+                resultActions.add(action);
+            }*/
+            if (setBefore.contains(nodeOfAction) || setAfter.contains(nodeOfAction)) {
+                resultActions.add(action);
+            }
+        }
+
+        return resultActions;
+    }
+
+    public static void mainCheckGetOnlyBlackChanges(String[] args) {
+        String s = "\t\tif (recipeType == null) {\n" +
+                "\t\t\treturn false;\n" +
+                "\t\t}\n" +
+                "\t\tfor (ItemStack <a id=\"change\">input</a> : recipeType.getInputs()) {\n" +
+                "\t\t\tBoolean hasItem = false;\n" +
+                "\t\t\tfor (int inputslot : inputSlots) {\n" +
+                "\t\t\t\tif (ItemUtils.<a id=\"change\">isItemEqual(</a>input, inventory.getStackInSlot(inputslot), true, true,\n" +
+                "\t\t\t\t\trecipeType.<a id=\"change\">useOreDic())</a> && inventory.getStackInSlot(inputslot).getCount() &gt;= input.getCount()) {\n" +
+                "\t\t\t\t\thasItem = true;\n" +
+                "\t\t\t\t}\n" +
+                "\t\t\t}";
+
+        System.out.println(getOnlyBlackChanges2(s));
     }
 
     static class BeforeAfterNodes {
         ITree before;
         ITree after;
 
-        BeforeAfterNodes(ITree b, ITree a) {
+        ITree rawBefore;
+        ITree rawAfter;
+
+        BeforeAfterNodes(ITree b, ITree a, ITree rb, ITree ra) {
             before = b;
             after = a;
+            rawBefore = rb;
+            rawAfter = ra;
         }
     }
 
@@ -208,7 +646,7 @@ public class Main {
 
 
     public static BeforeAfterNodes getBeforeAfterNodes(Matcher m, int start_ind_before, int end_ind_before,
-                                                       int start_ind_after, int end_ind_after) {
+                                                       int start_ind_after, int end_ind_after, String file_before, String file_after) {
         ITree nodeBeforeFile = m.getSrc();
         ITree nodeAfterFile = m.getDst();
 
@@ -217,6 +655,15 @@ public class Main {
 
         ITree nodeBefore = findMinCoverNode(nodeBeforeFile, start_ind_before, end_ind_before);
         ITree nodeAfter = findMinCoverNode(nodeAfterFile, start_ind_after, end_ind_after);
+
+        System.out.println("NODE BEFORE");
+        System.out.println(nodeBefore.toTreeString());
+        System.out.println("NODE AFTER");
+        System.out.println(nodeAfter.toTreeString());
+        System.out.println("____________________________");
+
+        //System.out.println("\nINDICES AND NODE INDICES:");
+        //System.out.println(start_ind_before + " " + end_ind_before);
 
         //System.out.println("NODE BEFORE");
         //System.out.println(nodeBefore.toTreeString());
@@ -244,16 +691,59 @@ public class Main {
         //System.out.println("FIRST MAPPED PARENT");
         //System.out.println(store.firstMappedSrcParent(nodeBefore).toTreeString());
 
+        int cur_num = 0;
+
         for (ITree i = nodeBefore; i != null; i = i.getParent()) {
+            //System.out.println("CURRENT\n " + i.toTreeString());
+            //System.out.println("HASHCODE: " + i.hashCode());
+
+            if (store.getDst(i) == null) {
+                continue;
+            }
+
+            //System.out.println("CURRENT MAPPING POS!!!!!!: " + store.getDst(i).getPos() + " " + store.getDst(i).getEndPos());
+
+            int steps = 0;
+
             for (ITree j = nodeAfter; j != null; j = j.getParent()) {
-                if (store.getDst(i) == null) {
-                    continue;
-                }
+                /*if (cur_num < 2 && steps < 2) {
+                    System.out.println("J:");
+                    System.out.println(j.toTreeString());
+                    System.out.println(j.getDepth());
+                    System.out.println(j.getPos() + " " + j.getEndPos());
+                    ITree parent = j.getParent().getParent().getParent().getParent().getParent();
+                    //System.out.println("PARENTS TREE: \n" + parent.toTreeString());
+                    System.out.println("PARENTS POS: " + parent.getPos() + " " + parent.getEndPos());
+                    System.out.println("HASHCODE: " + j.hashCode());
+                    System.out.println("FRAGMENT - 200:\n" + file_after.substring(j.getPos() - 200, j.getEndPos()));
+                    System.out.println("\n");
+
+                    System.out.println("STORE.GETDST(I):");
+                    System.out.println(store.getDst(i).toTreeString());
+                    System.out.println(store.getDst(i).getDepth());
+                    System.out.println(store.getDst(i).getPos());
+                    ITree parent2 = store.getDst(i).getParent().getParent();
+                    //System.out.println("PARENTS TREE: \n" + store.getDst(i).getParent().getParent().getParent().getParent().getParent().toTreeString());
+                    System.out.println("PARENTS POS: " + parent2.getPos() + " " + parent2.getEndPos());
+                    System.out.println("PARENTS POS [2]: " + parent2.getParent().getPos() + " " + parent2.getParent().getEndPos());
+                    System.out.println("PARENTS POS [3]: " + parent2.getParent().getParent().getPos() + " " + parent2.getParent().getParent().getEndPos());
+                    System.out.println("PARENTS POS [4]: " + parent2.getParent().getParent().getParent().getPos() + " " + parent2.getParent().getParent().getParent().getEndPos());
+                    System.out.println("HASHCODE: " + store.getDst(i).hashCode());
+                    System.out.println("FRAGMENT - 200:\n" + file_after.substring(store.getDst(i).getPos() - 200, store.getDst(i).getEndPos()));
+                    System.out.println("\n");
+                }*/
+
+                steps++;
 
                 if (store.getDst(i).toTreeString().equals(j.toTreeString())) {
-                    return new BeforeAfterNodes(i, store.getDst(i));
+                    //System.out.println("FINAL HASHCODES: " + store.getDst(i).hashCode() + " " + j.hashCode());
+                    //System.out.println("FINAL MAPPING POSITIONS: " + store.getDst(i).getPos() + " " + store.getDst(i).getEndPos());
+                    //System.out.println("FINAL J POSITIONS: " + j.getPos() + " " + j.getEndPos());
+                    return new BeforeAfterNodes(i, store.getDst(i), nodeBefore, nodeAfter);
                 }
             }
+
+            cur_num ++;
         }
 
 
@@ -276,7 +766,26 @@ public class Main {
         return null;
     }
 
-    public static void main(String[] args) throws IOException, GitAPIException {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    public static void main2(String[] args) throws IOException, GitAPIException {
         Run.initGenerators();
 
         TreeContext treeContext = null;
@@ -350,8 +859,8 @@ public class Main {
                         System.out.println("GitConnector is not connected");
                     }
 
-                    String afterContent = afterAndBefore.get(0).replace("\t", "");
-                    String beforeContent = afterAndBefore.get(1).replace("\t", "");
+                    String afterContent = afterAndBefore.get(0).replace("\t", "    ");
+                    String beforeContent = afterAndBefore.get(1).replace("\t", "    ");
 
                     File file_before = new File("tmp/file_before.java");
                     file_before.createNewFile();
@@ -389,8 +898,8 @@ public class Main {
 
                     ArrayList<String> beforeAndAfterFragments = null;
                     beforeAndAfterFragments = getFragments(content);
-                    String fragmentBefore = getOnlyBlackChanges(beforeAndAfterFragments.get(0)).trim();
-                    String fragmentAfter = getOnlyBlackChanges(beforeAndAfterFragments.get(1)).trim();
+                    String fragmentBefore = getOnlyBlackChanges1(beforeAndAfterFragments.get(0)).trim();
+                    String fragmentAfter = getOnlyBlackChanges1(beforeAndAfterFragments.get(1)).trim();
 
                     //System.out.println("BEFORE");
                     //System.out.println(fragmentBefore);
@@ -438,6 +947,13 @@ public class Main {
                         out.print(afterNode.toTreeString());
                     }
 
+                    try (PrintWriter out = new PrintWriter("tmp/src_tree")) {
+                        out.print(src.toTreeString());
+                    }
+                    try (PrintWriter out = new PrintWriter("tmp/dst_tree")) {
+                        out.print(dst.toTreeString());
+                    }
+
 
                     //System.out.println("BEFORE DEPTH: " + beforeNode.getDepth());
                     //System.out.println("AFTER DEPTH: " + afterNode.getDepth());
@@ -447,13 +963,13 @@ public class Main {
                     try {
                         m.match();
                     } catch (NullPointerException e) {
-                        System.out.println("NullPointerException in m.match()");
+                        System.out.println("Cannot match: NullPointerException in m.match()");
 
                         //System.out.println(beforeNode.toTreeString());
-                        System.out.println("BEFORE DEPTH: " + beforeNode.getDepth());
-                        System.out.println("_________");
+                        //System.out.println("BEFORE DEPTH: " + beforeNode.getDepth());
+                        //System.out.println("_________");
                         //System.out.println(afterNode.toTreeString());
-                        System.out.println("AFTER DEPTH: " + afterNode.getDepth());
+                        //System.out.println("AFTER DEPTH: " + afterNode.getDepth());
 
                         if_break = true;
                         break;
@@ -461,7 +977,8 @@ public class Main {
 
                     //System.out.println(treeSrc.getTypeLabel(42));
 
-                    BeforeAfterNodes nodes = getBeforeAfterNodes(m, start_ind, end_ind, start_ind2, end_ind2);
+                    BeforeAfterNodes nodes = getBeforeAfterNodes(m, start_ind, end_ind, start_ind2, end_ind2,
+                            beforeContent, afterContent);
 
                     ITree nodeBefore = nodes.before;
                     ITree nodeAfter = nodes.after;
@@ -469,9 +986,13 @@ public class Main {
                     Matcher fragmentsMatcher = Matchers.getInstance().getMatcher(nodeBefore, nodeAfter);
                     fragmentsMatcher.match();
 
-                    //System.out.println(nodeBefore.toTreeString());
-                    //System.out.println("________________");
-                    //System.out.println(nodeAfter.toTreeString());
+                    System.out.println(nodeBefore.toTreeString());
+                    System.out.println("________________");
+                    System.out.println(nodeAfter.toTreeString());
+                    System.out.println("\n________ANOTHER REPRESENTATION________\n");
+                    System.out.println(nodeBefore.toPrettyString(treeContext));
+                    System.out.println("________________");
+                    System.out.println(nodeAfter.toPrettyString(treeContext));
 
                     //ActionGenerator g = new ActionGenerator(nodeBefore, nodeAfter, m.getMappings());
                     ActionGenerator g = new ActionGenerator(nodeBefore, nodeAfter, fragmentsMatcher.getMappings());
@@ -486,7 +1007,9 @@ public class Main {
                     System.out.println(actions.size());
 
                     if (actions.size() > NUM_ACTIONS_THRESHOLD) {
-                        continue;
+                        if_break = true;
+                        break;
+                        //continue;
                     }
 
                     try {
@@ -498,7 +1021,9 @@ public class Main {
                         }
                     } catch (NullPointerException e) {
                         System.out.println("NullPointerException in printing actions");
-                        continue;
+                        if_break = true;
+                        break;
+                        //continue;
                     }
 
                     num_changes++;
@@ -521,11 +1046,61 @@ public class Main {
         printHist(treeContext);
     }
 
+    private static void checkingAllTree(ITree tree, Matcher m, String fileBefore, String fileAfter) {
+        MappingStore store = m.getMappings();
+
+        String treeAsStr = "\t\t\t\t\t\t\t\t32@@\n" +
+                "\t\t\t\t\t\t\t\t\t32@@\n" +
+                "\t\t\t\t\t\t\t\t\t\t42@@binary\n" +
+                "\t\t\t\t\t\t\t\t\t\t32@@\n" +
+                "\t\t\t\t\t\t\t\t\t\t\t42@@getTmpDir\n" +
+                "\t\t\t\t\t\t\t\t\t42@@testBlockSize";
+        treeAsStr = treeAsStr.replace("\t", "    ");
+
+
+        String stripped = tree.toTreeString().trim()
+                .replace(" ", "")
+                .replace("\t", "")
+                .replace("\n", "");
+
+        if (stripped.endsWith("42@@testBlockSize") && stripped.contains("binary") && stripped.contains("getTmpDir")) {
+            System.out.println("\n\nSTART:");
+            System.out.println(treeAsStr);
+            System.out.println("__________________________________DELIMITER__________________________________");
+            System.out.println(tree.toTreeString());
+            System.out.println("END\n\n");
+        }
+
+        String strippedPattern = treeAsStr
+                .replace(" ", "")
+                .replace("\t", "")
+                .replace("\n", "");
+
+        if (strippedPattern.equals(stripped)) {
+            System.out.println("HASH: " + tree.getHash());
+            System.out.println("HASHCODE: " + tree.hashCode());
+            System.out.println("POSITIONS: " + tree.getPos() + " " + tree.getEndPos());
+            System.out.println("FRAGMENT - 300:\n" + fileBefore.substring(tree.getPos() - 300, tree.getEndPos()));
+            System.out.println("TREE:");
+            System.out.println(tree.toTreeString());
+            System.out.println("MAPPING HASHCODE: " + store.getDst(tree).hashCode());
+            System.out.println("MAPPING POSITIONS: " + store.getDst(tree).getPos() + " " + store.getDst(tree).getEndPos());
+            System.out.println("MAPPING FRAGMENT - 300:\n" + fileAfter.substring(store.getDst(tree).getPos() - 300, store.getDst(tree).getEndPos()));
+            System.out.println("MAPPING:");
+            System.out.println(store.getDst(tree).toTreeString());
+        }
+
+        int num_children = tree.getChildren().size();
+        for (int i = 0; i < num_children; i++) {
+            checkingAllTree(tree.getChild(i), m, fileBefore, fileAfter);
+        }
+    }
+
 
     public static String PATTERNS_PATH = "/Users/aliscafo/Downloads/CPatMiner-master 2/SemanticChangeGraphMiner/output/patterns/repos-hybrid/1";
     public static String REPOS_PATH = "/Volumes/Transcend/Alina/repos";
 
-    public static void mainMain(String[] args) throws IOException, GitAPIException {
+    public static void main1(String[] args) throws IOException, GitAPIException {
         Run.initGenerators();
 
         File patternsDir = new File(PATTERNS_PATH);
@@ -589,8 +1164,8 @@ public class Main {
                         System.out.println("GitConnector is not connected");
                     }
 
-                    String afterContent = afterAndBefore.get(0).replace("\t", "");
-                    String beforeContent = afterAndBefore.get(1).replace("\t", "");
+                    String afterContent = afterAndBefore.get(0).replace("\t", "    ");
+                    String beforeContent = afterAndBefore.get(1).replace("\t", "    ");
 
                     File file_before = new File("tmp/file_before.java");
                     file_before.createNewFile();
@@ -620,8 +1195,8 @@ public class Main {
 
                     ArrayList<String> beforeAndAfterFragments = null;
                     beforeAndAfterFragments = getFragments(content);
-                    String fragmentBefore = getOnlyBlackChanges(beforeAndAfterFragments.get(0));
-                    String fragmentAfter = getOnlyBlackChanges(beforeAndAfterFragments.get(1));
+                    String fragmentBefore = getOnlyBlackChanges1(beforeAndAfterFragments.get(0));
+                    String fragmentAfter = getOnlyBlackChanges1(beforeAndAfterFragments.get(1));
 
                     int start_ind = beforeContent.indexOf(fragmentBefore);
                     if (start_ind == -1) {
@@ -909,7 +1484,7 @@ public class Main {
         String before = content.substring(start1, end1)
                 //.replace("<a id=\"change\">", "")
                 //.replace("</a>", "")
-                .replace("\t", "")
+                .replace("\t", "    ")
                 .replace("&gt;", ">")
                 .replace("&lt;", "<");
         before = strip(before);
@@ -917,7 +1492,7 @@ public class Main {
         String after = content.substring(start2, end2)
                 //.replace("<a id=\"change\">", "")
                 //.replace("</a>", "")
-                .replace("\t", "")
+                .replace("\t", "    ")
                 .replace("&gt;", ">")
                 .replace("&lt;", "<");
         after = strip(after);
