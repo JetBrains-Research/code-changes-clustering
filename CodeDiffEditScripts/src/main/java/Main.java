@@ -3,6 +3,7 @@ import com.github.gumtreediff.actions.model.Action;
 import com.github.gumtreediff.client.Run;
 import com.github.gumtreediff.gen.Generators;
 import com.github.gumtreediff.gen.jdt.JdtTreeGenerator;
+import com.github.gumtreediff.matchers.Mapping;
 import com.github.gumtreediff.matchers.MappingStore;
 import com.github.gumtreediff.matchers.Matcher;
 import com.github.gumtreediff.matchers.Matchers;
@@ -37,6 +38,8 @@ public class Main {
 
     public static List<String> consideredPatterns = Arrays.asList("10 136", "11 719", "14 239", "18 800",
             "22 3921", "25 8331", "27 3622", "27 7869", "9 35");
+    public static int consideredPatternsA = 3;
+    public static int consideredPatternsB = 50;
 
     // only 5-grams
     public static List<String> consideredEditScripts = Arrays.asList("DEL 32@@ DEL 21@@ DEL 42@@ DEL 32@@ DEL 21@@",
@@ -47,10 +50,18 @@ public class Main {
             "MOV 42@@ 32@@ at 0 UPD 42@@ MOV 42@@ 32@@ at 1 UPD 42@@ MOV 42@@ 32@@ at 2");
 
     public static int num_changes = 0;
-    public static int NUM_ACTIONS_THRESHOLD = 100;
-    public static int NGRAM = 5;
+    public static int NUM_ACTIONS_THRESHOLD = 200;
 
-    public static void dfs(ITree node) {
+    public static int NGRAM = 11;
+    private static String RESULTS_FOR_HIST_DIR = "/Volumes/Seagate/Alina/result_for_lase_treat-false";
+    private static boolean TREAT_SMALL_SCRIPTS_AS_NGRAM = false;
+    private static boolean CALCULATE_HISTS = true;
+    private static boolean USE_SAVED_ACTIONS = true;
+    private static boolean USE_PARENTS = true;
+    private static String ACTIONS_DIR_PATH =
+            "/Users/aliscafo/Documents/ALINA/WORK/SPbAU/thesis/CodeDiffEditScripts/LaseActions";
+
+    public static void dfs(ITree node/*, List<ITree> visited*/) {
         List<ITree> children = node.getChildren();
 
         System.out.println(node.toShortString() + " " + node.getPos() + " " + node.getEndPos());
@@ -254,18 +265,22 @@ public class Main {
      * @return
      */
     // TODO: embed this function to the main code.
-    public static Indices getCorrectIndices(String file, String fragment) {
+    public static Indices getCorrectIndices(String file, String fragment, int fromIndex) {
         String startTag = "<a id=\"change\">";
         String endTag = "</a>";
 
         //System.out.println("\n\nFRAGMENT");
         //System.out.println(fragment);
 
+        fragment = strip(fragment.trim(), '\n');
+
         String notHighlighted = fragment
                 .replace(startTag, "")
                 .replace(endTag, "");
 
-        int startFragment = file.indexOf(notHighlighted);
+        //System.out.println("|" + notHighlighted + "|");
+        //System.out.println("From Index: " + fromIndex + " Fragment: " + file.substring(fromIndex - 50, fromIndex + 50));
+        int startFragment = file.indexOf(notHighlighted, fromIndex);
 
         System.out.println("\n______________________NUMBER OF FRAGMENT OCCURENCES: " + numberOfOccurrences(file, notHighlighted) + "\n");
 
@@ -362,6 +377,21 @@ public class Main {
                     String commitName = parts[0];
                     String fileName = parts[1];
 
+                    if (repoName.equals("apache/pig") && commitName.equals("19c9d91aa66d3b3d102dbf44437958f5b7957098"))
+                        commitName = "deb4a30b610806bb1b99bccd454811e77eafab90";
+                    if (repoName.equals("apache/pig") && commitName.equals("3adf82bbd8d6c324e5a09554f5064c316af071a3"))
+                        commitName = "dc0fa7b44b8ac83d8df4a0dac9f48eab76851148";
+                    if (repoName.equals("apache/pig") && commitName.equals("d1ea940063270199e57c5efde9fbf76912773c7a"))
+                        commitName = "6dc4f57f4b8592c1804df08891036ce1515b1f9a";
+                    if (repoName.equals("apache/pig") && commitName.equals("9e280062373d817221e2466ce1234741ad964f44"))
+                        commitName = "e9ff9c27c10c61362e8460b35af4b88b21ef8f15";
+
+
+                    File projectDir = new File(REPOS_PATH + "/" + repoName);
+                    if (!projectDir.exists()) {
+                        continue;
+                    }
+
                     GitConnector gc = new GitConnector(REPOS_PATH + "/" + repoName + "/.git");
                     System.out.println(REPOS_PATH + "/" + repoName + "/.git");
                     ArrayList<String> afterAndBefore = null;
@@ -379,6 +409,7 @@ public class Main {
                     }
 
                     if (gc.connect()) {
+                        System.out.println("Connecting...");
                         afterAndBefore = gc.getFileFromCommit(commitName, fileName);
                         gc.close();
                     } else {
@@ -464,10 +495,11 @@ public class Main {
     }
 
     public static void mainToShowTrees(String[] args) throws IOException, GitAPIException {
-        showTreesForPattern("9", "35", "sampleChange1.html");
-        showTreesForPattern("9", "35", "sampleChange2.html");
-        showTreesForPattern("9", "35", "sampleChange3.html");
-        showTreesForPattern("9", "35", "sampleChange4.html");
+        //showTreesForPattern("5", "2013", "sampleChange16.html");
+        //showTreesForPattern("8", "2266", "sampleChange63.html");
+        //showTreesForPattern("8", "2266", "sampleChange40.html");
+        showTreesForPattern("8", "2266", "sampleChange12.html");
+        //showTreesForPattern("4", "13964", "sampleChange12.html");
     }
 
     public static void showTreesForPattern(String size_dir, String id_dir, String filename) throws IOException, GitAPIException {
@@ -494,10 +526,12 @@ public class Main {
         System.out.println(REPOS_PATH + "/" + repoName + "/.git");
         ArrayList<String> afterAndBefore = null;
 
+
         File fileBeforeSaved = new File(COMMIT_FILES_DIR + "/" +
                 repoName + "/" + commitName + "/" + fileName.substring(0, fileName.length() - 5) + "_before.java");
         File fileAfterSaved = new File(COMMIT_FILES_DIR + "/" +
                 repoName + "/" + commitName + "/" + fileName.substring(0, fileName.length() - 5) + "_after.java");
+
 
         if (!fileBeforeSaved.exists() || !fileAfterSaved.exists()) {
             if (gc.connect()) {
@@ -538,6 +572,13 @@ public class Main {
 
         treeContext = treeSrc;
 
+        for (int i = 0; i < 100; i++) {
+            if (treeContext.getTypeLabel(i) != null) {
+                System.out.println(i + " " + treeContext.getTypeLabel(i));
+            }
+        }
+        System.out.println("\n\n\n");
+
         File file_after = new File("tmp/file_after.java");
         file_after.createNewFile();
         try (PrintWriter out = new PrintWriter(file_after.getAbsolutePath())) {
@@ -556,8 +597,8 @@ public class Main {
         ArrayList<String> beforeAndAfterFragments = null;
         beforeAndAfterFragments = getFragments(content);
 
-        Indices indicesBefore = getCorrectIndices(beforeContent, beforeAndAfterFragments.get(0));
-        Indices indicesAfter = getCorrectIndices(afterContent, beforeAndAfterFragments.get(1));
+        Indices indicesBefore = getCorrectIndices(beforeContent, beforeAndAfterFragments.get(0), 0);
+        Indices indicesAfter = getCorrectIndices(afterContent, beforeAndAfterFragments.get(1), 0);
 
         if (indicesBefore == null) {
             System.out.println("Before fragment wasn't found in file.");
@@ -594,20 +635,40 @@ public class Main {
             return;
         }
 
-        try (PrintWriter out = new PrintWriter("tmp/before_node")) {
+        System.out.println();
+
+        try (PrintWriter out = new PrintWriter("tmp/before_node" + id_dir + "_" + filename)) {
             out.print(beforeNode.toTreeString());
         }
 
-        try (PrintWriter out = new PrintWriter("tmp/after_node")) {
+        try (PrintWriter out = new PrintWriter("tmp/after_node" + id_dir + "_" + filename)) {
             out.print(afterNode.toTreeString());
         }
 
-        try (PrintWriter out = new PrintWriter("tmp/src_tree")) {
+        try (PrintWriter out = new PrintWriter("tmp/src_tree" + id_dir + "_" + filename)) {
             out.print(src.toTreeString());
         }
-        try (PrintWriter out = new PrintWriter("tmp/dst_tree")) {
+        try (PrintWriter out = new PrintWriter("tmp/dst_tree" + id_dir + "_" + filename)) {
             out.print(dst.toTreeString());
         }
+
+        try (PrintWriter out = new PrintWriter("tmp/src_tree_preorder" + id_dir + "_" + filename)) {
+            List<ITree> srcList = new ArrayList<>();
+            src.preOrder().forEach(srcList::add);
+            for (ITree iTree : srcList) {
+                out.println(new String(new char[iTree.getDepth()]).replace('\0', '\t') +
+                        iTree.toShortString() + "       -> " + iTree.getId());
+            }
+        }
+        try (PrintWriter out = new PrintWriter("tmp/dst_tree_preorder" + id_dir + "_" + filename)) {
+            List<ITree> dstList = new ArrayList<>();
+            dst.preOrder().forEach(dstList::add);
+            for (ITree iTree : dstList) {
+                out.println(new String(new char[iTree.getDepth()]).replace('\0', '\t') +
+                        iTree.toShortString() + "       -> " + iTree.getId());
+            }
+        }
+
 
         // Match
         Matcher m = Matchers.getInstance().getMatcher(src, dst); // retrieve the default matcher
@@ -617,12 +678,51 @@ public class Main {
             System.out.println("Cannot match: NullPointerException in m.match()");
         }
 
+
+        System.out.println("\nMAPPINGS:");
+        for (Mapping mapping : m.getMappingsAsSet()) {
+            System.out.println(mapping.first.getId() + " -> " + mapping.second.getId());
+        }
+        System.out.println("\n");
+
+
         ActionGenerator allFileGen = new ActionGenerator(src, dst, m.getMappings());
         allFileGen.generate();
 
         BeforeAfterNodes nodes = getBeforeAfterNodes(m,
                 indicesBefore.start, indicesBefore.end, indicesAfter.start, indicesAfter.end,
                 beforeContent, afterContent);
+
+
+
+
+
+        Matcher localM = Matchers.getInstance().getMatcher(nodes.before.getParent(), nodes.after.getParent()); // retrieve the default matcher
+        try {
+            localM.match();
+        } catch (NullPointerException e) {
+            System.out.println("Cannot match: NullPointerException in localM.match()");
+        }
+        ActionGenerator localGen = new ActionGenerator(nodes.before.getParent(), nodes.after.getParent(), localM.getMappings());
+        localGen.generate();
+        List<Action> localActions = localGen.getActions();
+        System.out.println("\nACTIONS OLD WAY:");
+        System.out.println(localActions.size());
+        try {
+            for (Action action : localActions) {
+                System.out.println(action.toString() + "       -> " + action.getNode().getId());
+            }
+
+        } catch (NullPointerException e) {
+            for (Action action : localActions) {
+                System.out.println(action.getName() + " " + action.getNode().toShortString() + "       -> " + action.getNode().getId());
+            }
+        }
+        System.out.println("\n");
+
+
+
+
 
         ITree nodeBeforeRaw = nodes.rawBefore;
         ITree nodeAfterRaw = nodes.rawAfter;
@@ -635,7 +735,12 @@ public class Main {
         System.out.println("___________________\n");
 
         List<Action> allActions = allFileGen.getActions();
-        List<Action> extractedActionsRaw = extractActions(allActions, nodeBeforeRaw, nodeAfterRaw);
+        try (PrintWriter out = new PrintWriter("tmp/all_actions" + id_dir + "_" + filename)) {
+            for (int i = 0; i < allActions.size(); i++) {
+                out.println(allActions.get(i).toString() + "       -> " + allActions.get(i).getNode().getId());
+            }
+        }
+        List<Action> extractedActionsRaw = extractActionsWithOrdering(allActions, nodeBeforeRaw, nodeAfterRaw);
 
         System.out.println("______________________________________");
         System.out.println("ACTIONS SIZE");
@@ -644,23 +749,30 @@ public class Main {
         try {
             System.out.println("\nActions retrieved in the third (raw) way:");
             for (Action action : extractedActionsRaw) {
-                System.out.println(action.toString());
+                System.out.println(action.toString() + "       -> " + action.getNode().getId());
             }
 
         } catch (NullPointerException e) {
             System.out.println("\nActions retrieved in the third (raw) way:");
             for (Action action : extractedActionsRaw) {
-                System.out.println(action.toString());
+                System.out.println(action.toString() + "       -> " + action.getNode().getId());
             }
         }
     }
 
-    private static String RESULTS_FOR_HIST_DIR = "/Users/aliscafo/Documents/ALINA/WORK/SPbAU/thesis/result_for_hist_big_data";
-    private static boolean USE_SAVED_ACTIONS = false;
+    //private static String RESULTS_FOR_HIST_DIR = "/Users/aliscafo/Documents/ALINA/WORK/SPbAU/thesis/result_for_hist_all_data3-60";
+    //private static String RESULTS_FOR_HIST_DIR = "/Volumes/Seagate/Alina/result_for_hist_all_data3-50-1gram";
+    //private static boolean USE_SAVED_ACTIONS = true;
 
     // TODO: delete "if (num_processed >= 30)"
 
-    public static void main(String[] args) throws IOException, GitAPIException {
+    /*
+     Last main which can generate edit scripts, save them and use them to calculate hists. It generates edit scripts as
+     subsequence of edit script of all file. However, it leads to incorrect mappings. For example, a node of one method
+     can be mapped to a node of another method. So next try is to extract each method ("before" and "after") to
+     separate file and run gumtree algorithm on these two files.
+    */
+    public static void mainMAIN(String[] args) throws IOException, GitAPIException {
         Run.initGenerators();
 
         TreeContext treeContext = null;
@@ -680,13 +792,12 @@ public class Main {
                 break;
             }
 
-            /*if (!size_dir.getName().equals("9")) {
+            // TODO: UNCOMMENT WHILE CALCULATING HISTS
+            if (!(consideredPatternsA <= Integer.parseInt(size_dir.getName()) &&
+                    Integer.parseInt(size_dir.getName()) <= consideredPatternsB)) {
                 continue;
-            }*/
+            }
 
-            /*if (size_dir.getName().equals("30")) {
-                break;
-            }*/
 
             File[] id_dirs = Arrays.stream(size_dir.listFiles()).filter(file -> isNumeric(file.getName())).toArray(File[]::new);
             Arrays.sort(id_dirs, Comparator.comparingInt(o -> Integer.parseInt(o.getName())));
@@ -694,9 +805,16 @@ public class Main {
             int num_processed = 0;
 
             for (File id_dir : id_dirs) {
-                /*if (!id_dir.getName().equals("35")) {
+                // Too long calculation
+                if (id_dir.getName().equals("6520")) {
                     continue;
-                }*/
+                }
+                if (id_dir.getName().equals("10518")) {
+                    continue;
+                }
+                if (id_dir.getName().equals("12342")) {
+                    continue;
+                }
 
                 /*if (num_processed >= 30) {
                     break;
@@ -722,6 +840,24 @@ public class Main {
                     System.out.println("\n\n\n" + size_dir.getName() + " " + id_dir.getName());
                     System.out.println("FILE: " + file.getName());
 
+                    //
+                    //
+                    //
+                    //
+                    // TODO: DELETE WHILE CALCULATING HISTS !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                    /*String filename = file.getName();
+                    File curActionFile = new File(ACTIONS_DIR_PATH + "/" +
+                            size_dir.getName() + "/" + id_dir.getName() + "/" + filename.substring(0, filename.length() - 5));
+                    if (curActionFile.exists()) {
+                        System.out.println("EDIT SCRIPT EXISTS!");
+                        continue;
+                    }*/
+                    //
+                    //
+                    //
+                    //
+                    //
+
                     if (USE_SAVED_ACTIONS) {
                         // TODO: make correct calculation of num_changes.
                         num_changes++;
@@ -738,6 +874,15 @@ public class Main {
                     String repoName = parts[parts.length - 1].trim();
                     String commitName = parts[0];
                     String fileName = parts[1];
+
+                    if (repoName.equals("apache/pig") && commitName.equals("19c9d91aa66d3b3d102dbf44437958f5b7957098"))
+                        commitName = "deb4a30b610806bb1b99bccd454811e77eafab90";
+                    if (repoName.equals("apache/pig") && commitName.equals("3adf82bbd8d6c324e5a09554f5064c316af071a3"))
+                        commitName = "dc0fa7b44b8ac83d8df4a0dac9f48eab76851148";
+                    if (repoName.equals("apache/pig") && commitName.equals("d1ea940063270199e57c5efde9fbf76912773c7a"))
+                        commitName = "6dc4f57f4b8592c1804df08891036ce1515b1f9a";
+                    if (repoName.equals("apache/pig") && commitName.equals("9e280062373d817221e2466ce1234741ad964f44"))
+                        commitName = "e9ff9c27c10c61362e8460b35af4b88b21ef8f15";
 
                     GitConnector gc = new GitConnector(REPOS_PATH + "/" + repoName + "/.git");
                     System.out.println(REPOS_PATH + "/" + repoName + "/.git");
@@ -807,8 +952,8 @@ public class Main {
                     ArrayList<String> beforeAndAfterFragments = null;
                     beforeAndAfterFragments = getFragments(content);
 
-                    Indices indicesBefore = getCorrectIndices(beforeContent, beforeAndAfterFragments.get(0));
-                    Indices indicesAfter = getCorrectIndices(afterContent, beforeAndAfterFragments.get(1));
+                    Indices indicesBefore = getCorrectIndices(beforeContent, beforeAndAfterFragments.get(0), 0);
+                    Indices indicesAfter = getCorrectIndices(afterContent, beforeAndAfterFragments.get(1), 0);
 
                     if (indicesBefore == null) {
                         System.out.println("Before fragment wasn't found in file.");
@@ -978,6 +1123,1043 @@ public class Main {
         saveHists(treeContext);
     }
 
+
+    // TUFANO DATASET
+    private static String PATH_TO_WITH_LABELS = "/Users/aliscafo/Downloads/methods_with_label2.csv";
+    private static String PATH_TO_ANDROID = "/Users/aliscafo/Downloads/android";
+    private static String PATH_TO_GOOGLE = "/Users/aliscafo/Downloads/google";
+    private static String PATH_TO_OVIRT = "/Users/aliscafo/Downloads/ovirt";
+
+    private static Map<String, Pair<String, String>> from_abstract_to_real = new HashMap<>();
+    private static Map<String, String> from_abstract_to_label = new HashMap<>();
+
+    private static String PATH_TO_TUFANO_DATASET = "/Users/aliscafo/Documents/ALINA/WORK/SPbAU/thesis/CodeDiffEditScripts/TufanoDataset";
+
+    private static void putToMapOfRealMethods(String path) {
+        String content = readAllBytesJava7(path);
+        String[] pairs = content.split("====\n");
+        for (int i = 0; i < pairs.length; i++) {
+            //System.out.println(i);
+
+            //System.out.println("|" + pairs[i] + "|");
+
+            if (pairs[i].length() == 0)
+                continue;
+
+            String[] parts = pairs[i].split("----");
+            String[] abstracts = parts[0].split("\n");
+            String key = abstracts[0].trim() + " <SEP> " + abstracts[1].trim();
+            from_abstract_to_real.put(key, new Pair<>(parts[1], parts[2]));
+
+            /*
+            System.out.println(path);
+
+            System.out.println(pairs[i]);
+
+            System.out.println("\nSPLITTED\n");
+            System.out.println(parts[0]);
+            System.out.println("\nNEXT\n");
+            System.out.println(parts[1]);
+            System.out.println("\nNEXT\n");
+            System.out.println(parts[2]);
+
+            System.out.println("\n\nSEPARATOR\n\n");
+            */
+        }
+    }
+
+    /*
+     For Learning-CodeChanges dataset.
+     */
+    public static void mainLabeledTufano(String[] args) throws IOException {
+        Run.initGenerators();
+
+        TreeContext treeContext = null;
+
+        putToMapOfRealMethods(PATH_TO_ANDROID + "/small/android-50-test.txt");
+        putToMapOfRealMethods(PATH_TO_ANDROID + "/medium/android-50-100-test.txt");
+        putToMapOfRealMethods(PATH_TO_GOOGLE + "/small/google-50-test.txt");
+        putToMapOfRealMethods(PATH_TO_GOOGLE + "/medium/google-50-100-test.txt");
+        putToMapOfRealMethods(PATH_TO_OVIRT + "/ovirt-50-test.txt");
+        putToMapOfRealMethods(PATH_TO_OVIRT + "/medium/ovirt-50-100-test.txt");
+
+        String beginningFile = "class Example {\n" +
+                "\n";
+        String endingFile = "\n" +
+                "}";
+
+
+        File tufano_dataset = new File(PATH_TO_TUFANO_DATASET);
+        if (!tufano_dataset.exists())
+            tufano_dataset.mkdir();
+
+        Scanner scanner = new Scanner(new File(PATH_TO_WITH_LABELS));
+        int numLine = 1;
+        while (scanner.hasNext()) {
+            System.out.println("Elem " + numLine);
+
+            List<String> line = CSVUtils.parseLine(scanner.nextLine());
+            String key = strip(line.get(0).trim(), '"') + " <SEP> " + strip(line.get(1).trim(), '"');
+            String label = strip(line.get(2), '"');
+            from_abstract_to_label.put(key, label);
+
+            if (!from_abstract_to_real.containsKey(key)) {
+                System.out.println("DOES NOT CONTAIN:");
+                System.out.println(key);
+            }
+
+            Pair<String, String> realMethods = from_abstract_to_real.get(key);
+
+            if (USE_SAVED_ACTIONS && treeContext != null) {
+                addNgramsToSet(null, Integer.toString(numLine), Integer.toString(numLine),
+                        "sampleChange1.java", true);
+            } else {
+
+                File elemDir = new File(PATH_TO_TUFANO_DATASET + "/" + numLine);
+                if (!elemDir.exists()) {
+                    elemDir.mkdir();
+                }
+
+                File beforeMethod = new File(PATH_TO_TUFANO_DATASET + "/" + numLine + "/before.java");
+                if (!beforeMethod.exists()) {
+                    try (PrintWriter out = new PrintWriter(beforeMethod.getAbsolutePath())) {
+                        out.print(beginningFile);
+                        out.print(realMethods.getFirst());
+                        out.print(endingFile);
+                    }
+                }
+
+                File afterMethod = new File(PATH_TO_TUFANO_DATASET + "/" + numLine + "/after.java");
+                if (!afterMethod.exists()) {
+                    try (PrintWriter out = new PrintWriter(afterMethod.getAbsolutePath())) {
+                        out.print(beginningFile);
+                        out.print(realMethods.getSecond());
+                        out.print(endingFile);
+                    }
+                }
+
+
+                File labelFile = new File(PATH_TO_TUFANO_DATASET + "/" + numLine + "/label.txt");
+                if (!labelFile.exists()) {
+                    try (PrintWriter out = new PrintWriter(labelFile.getAbsolutePath())) {
+                        out.print(label);
+                    }
+                }
+
+                ITree src = null;
+                TreeContext treeSrc = null;
+                try {
+                    treeSrc = Generators.getInstance().getTree(beforeMethod.getPath());
+                    src = treeSrc.getRoot();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    continue;
+                }
+
+                if (treeContext == null) {
+                    treeContext = treeSrc;
+                }
+
+                ITree dst = null;
+                TreeContext treeDst = null;
+                try {
+                    treeDst = Generators.getInstance().getTree(afterMethod.getPath());
+                    dst = treeDst.getRoot();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    continue;
+                }
+
+                // Match
+                Matcher m = Matchers.getInstance().getMatcher(src, dst); // retrieve the default matcher
+                try {
+                    m.match();
+                } catch (NullPointerException e) {
+                    System.out.println("Cannot match: NullPointerException in m.match()");
+                    break;
+                }
+
+
+                ActionGenerator allFileGen = new ActionGenerator(src, dst, m.getMappings());
+                allFileGen.generate();
+                List<Action> allActions = allFileGen.getActions();
+
+                addNgramsToSet(allActions, Integer.toString(numLine), Integer.toString(numLine),
+                        "sampleChange1.java", false);
+            }
+
+            numLine++;
+        }
+        scanner.close();
+
+        if (CALCULATE_HISTS) {
+            saveHists(treeContext);
+        }
+    }
+
+
+    private static String PATH_TO_FULL_TUFANO_DATASET =
+            "/Users/aliscafo/Documents/ALINA/WORK/SPbAU/thesis/CodeDiffEditScripts/TufanoDatasetFull";
+    private static int GLOBAL_ELEMENT_ID = 0;
+
+    public static TreeContext processAndAddToFullDataset(String path_to_methods) throws IOException {
+        TreeContext treeContext = null;
+
+        System.out.println(path_to_methods);
+
+        String content = readAllBytesJava7(path_to_methods);
+        String[] pairs = content.split("====\n");
+        for (int i = 0; i < pairs.length; i++) {
+            if (pairs[i].length() == 0)
+                continue;
+
+            GLOBAL_ELEMENT_ID++;
+
+            if (GLOBAL_ELEMENT_ID % 400 == 0) {
+                System.out.println(GLOBAL_ELEMENT_ID);
+            }
+
+            String[] parts = pairs[i].split("----");
+
+            /*
+            System.out.println(parts[1]);
+            System.out.println(parts[2]);
+            System.out.println("__________\n\n");
+            */
+
+            String methodBefore = parts[1];
+            String methodAfter = parts[2];
+
+            if (USE_SAVED_ACTIONS && treeContext != null) {
+                addNgramsToSet(null, Integer.toString(GLOBAL_ELEMENT_ID), Integer.toString(GLOBAL_ELEMENT_ID),
+                        "sampleChange1.java", true);
+                continue;
+            } else {
+
+                String beginningFile = "class Example {\n" +
+                        "\n";
+                String endingFile = "\n" +
+                        "}";
+
+
+                File tufano_dataset = new File(PATH_TO_FULL_TUFANO_DATASET);
+                if (!tufano_dataset.exists())
+                    tufano_dataset.mkdir();
+
+
+                File elemDir = new File(PATH_TO_FULL_TUFANO_DATASET + "/" + GLOBAL_ELEMENT_ID);
+                if (!elemDir.exists()) {
+                    elemDir.mkdir();
+                }
+
+                File beforeMethod = new File(PATH_TO_FULL_TUFANO_DATASET + "/" + GLOBAL_ELEMENT_ID + "/before.java");
+                if (!beforeMethod.exists()) {
+                    try (PrintWriter out = new PrintWriter(beforeMethod.getAbsolutePath())) {
+                        out.print(beginningFile);
+                        out.print(methodBefore);
+                        out.print(endingFile);
+                    }
+                }
+
+                File afterMethod = new File(PATH_TO_FULL_TUFANO_DATASET + "/" + GLOBAL_ELEMENT_ID + "/after.java");
+                if (!afterMethod.exists()) {
+                    try (PrintWriter out = new PrintWriter(afterMethod.getAbsolutePath())) {
+                        out.print(beginningFile);
+                        out.print(methodAfter);
+                        out.print(endingFile);
+                    }
+                }
+
+                File origin = new File(PATH_TO_FULL_TUFANO_DATASET + "/" + GLOBAL_ELEMENT_ID + "/origin.java");
+                if (!origin.exists()) {
+                    try (PrintWriter out = new PrintWriter(origin.getAbsolutePath())) {
+                        out.print(path_to_methods);
+                    }
+                }
+
+                ITree src = null;
+                TreeContext treeSrc = null;
+                try {
+                    treeSrc = Generators.getInstance().getTree(beforeMethod.getPath());
+                    src = treeSrc.getRoot();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    continue;
+                }
+
+                if (treeContext == null) {
+                    treeContext = treeSrc;
+                }
+
+                ITree dst = null;
+                TreeContext treeDst = null;
+                try {
+                    treeDst = Generators.getInstance().getTree(afterMethod.getPath());
+                    dst = treeDst.getRoot();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    continue;
+                }
+
+                // Match
+                Matcher m = Matchers.getInstance().getMatcher(src, dst); // retrieve the default matcher
+                try {
+                    m.match();
+                } catch (NullPointerException e) {
+                    System.out.println("Cannot match: NullPointerException in m.match()");
+                    break;
+                }
+
+
+                ActionGenerator allFileGen = new ActionGenerator(src, dst, m.getMappings());
+                allFileGen.generate();
+                List<Action> allActions = allFileGen.getActions();
+
+                /*
+                for (Action action : allActions) {
+                    System.out.println(action.toString());
+                }
+                */
+
+                addNgramsToSet(allActions, Integer.toString(GLOBAL_ELEMENT_ID), Integer.toString(GLOBAL_ELEMENT_ID),
+                        "sampleChange1.java", true);
+            }
+        }
+
+        return treeContext;
+    }
+
+
+    /*
+     For full Tufano dataset.
+     */
+    public static void mainFullTufano(String[] args) throws IOException {
+        Run.initGenerators();
+
+        TreeContext treeContext = null;
+
+        treeContext = processAndAddToFullDataset(PATH_TO_ANDROID + "/small/android-50-train.txt");
+        processAndAddToFullDataset(PATH_TO_ANDROID + "/small/android-50-test.txt");
+        processAndAddToFullDataset(PATH_TO_ANDROID + "/small/android-50-eval.txt");
+
+        processAndAddToFullDataset(PATH_TO_ANDROID + "/medium/android-50-100-train.txt");
+        processAndAddToFullDataset(PATH_TO_ANDROID + "/medium/android-50-100-test.txt");
+        processAndAddToFullDataset(PATH_TO_ANDROID + "/medium/android-50-100-eval.txt");
+
+        processAndAddToFullDataset(PATH_TO_GOOGLE + "/small/google-50-train.txt");
+        processAndAddToFullDataset(PATH_TO_GOOGLE + "/small/google-50-test.txt");
+        processAndAddToFullDataset(PATH_TO_GOOGLE + "/small/google-50-eval.txt");
+
+        processAndAddToFullDataset(PATH_TO_GOOGLE + "/medium/google-50-100-train.txt");
+        processAndAddToFullDataset(PATH_TO_GOOGLE + "/medium/google-50-100-test.txt");
+        processAndAddToFullDataset(PATH_TO_GOOGLE + "/medium/google-50-100-eval.txt");
+
+        processAndAddToFullDataset(PATH_TO_OVIRT + "/ovirt-50-train.txt");
+        processAndAddToFullDataset(PATH_TO_OVIRT + "/ovirt-50-test.txt");
+        processAndAddToFullDataset(PATH_TO_OVIRT + "/ovirt-50-eval.txt");
+
+        processAndAddToFullDataset(PATH_TO_OVIRT + "/ovirt-50-train.txt");
+        processAndAddToFullDataset(PATH_TO_OVIRT + "/medium/ovirt-50-100-test.txt");
+        processAndAddToFullDataset(PATH_TO_OVIRT + "/ovirt-50-eval.txt");
+
+        if (CALCULATE_HISTS) {
+            saveHists(treeContext);
+        }
+    }
+
+    private static ITree findMethodNode(ITree node, String content, int startSignatureIndex, int endSignatureIndex) {
+        int startPos = node.getPos();
+        int endPos = node.getEndPos();
+
+        /*
+        if (node.getType() == 31) {
+            System.out.println("\n\nMETHOD EXAMPLE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+            System.out.println(content.substring(startPos, endPos));
+            System.out.println(startSignatureIndex + " " + endSignatureIndex);
+            System.out.println(startPos + " " + endPos);
+        }
+        */
+
+        if (node.getType() == 31 && startSignatureIndex <= endPos && startPos <= endSignatureIndex)
+            return node;
+
+        List<ITree> children = node.getChildren();
+
+        for (ITree child : children) {
+            ITree ansTree = findMethodNode(child, content, startSignatureIndex, endSignatureIndex);
+
+            if (ansTree != null)
+                return ansTree;
+        }
+
+        return null;
+    }
+
+    private static void findMethodAndWriteToFile(String filePath, String methodPath, String pathToMethodContent) throws FileNotFoundException {
+        ITree tree = null;
+        TreeContext context = null;
+        try {
+            context = Generators.getInstance().getTree(filePath);
+            tree = context.getRoot();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return;
+        }
+
+        String fileContent = readAllBytesJava7(filePath);
+        String methodSignature = readAllBytesJava7(methodPath);
+
+        int startIndex = fileContent.indexOf(methodSignature);
+
+        if (startIndex == -1) {
+            System.out.println(filePath);
+        }
+
+        int endIndex = startIndex + methodSignature.length();
+
+        //System.out.println(fileContent.substring(startIndex, endIndex));
+
+        ITree methodNode = findMethodNode(tree, fileContent, startIndex, endIndex);
+
+        if (methodNode == null) {
+            System.out.println(filePath);
+            return;
+        }
+
+        String beginningFile = "class Example {\n" +
+                "\n";
+        String endingFile = "\n" +
+                "}";
+
+        //System.out.println("\n\n" + fileContent.substring(methodNode.getPos(), methodNode.getEndPos()) + "\n\n");
+
+        try (PrintWriter out = new PrintWriter(pathToMethodContent)) {
+            out.print(beginningFile);
+            out.print(fileContent.substring(methodNode.getPos(), methodNode.getEndPos()));
+            out.print(endingFile);
+        }
+    }
+
+
+    private static String PATH_TO_LASE_DATASET =
+            "/Users/aliscafo/Documents/ALINA/WORK/SPbAU/thesis/CodeDiffEditScripts/LaseDataset";
+    /*
+     For Lase dataset.
+     */
+    public static void main(String[] args) throws IOException {
+        Run.initGenerators();
+
+        TreeContext treeContext = null;
+
+        for (int i = 1; i <= 149; i++) {
+            System.out.println(i);
+
+            String pathToElement = PATH_TO_LASE_DATASET + "/" + i;
+
+            String beforeFile = pathToElement + "/" + "Before.java";
+            String beforeMethodContentPath = pathToElement + "/" + "BeforeMethodContent.java";
+            File beforeMethodContentFile = new File(beforeMethodContentPath);
+            if (!beforeMethodContentFile.exists())
+                findMethodAndWriteToFile(beforeFile, pathToElement + "/" + "method_before",
+                    beforeMethodContentPath);
+
+            String afterFile = pathToElement + "/" + "After.java";
+            String afterMethodContentPath = pathToElement + "/" + "AfterMethodContent.java";
+            File afterMethodContentFile = new File(afterMethodContentPath);
+            if (!afterMethodContentFile.exists())
+                findMethodAndWriteToFile(afterFile, pathToElement + "/" + "method_after",
+                    afterMethodContentPath);
+
+            ITree src = null;
+            TreeContext treeSrc = null;
+            try {
+                treeSrc = Generators.getInstance().getTree(beforeMethodContentPath);
+                src = treeSrc.getRoot();
+            } catch (Exception e) {
+                e.printStackTrace();
+                continue;
+            }
+
+            if (treeContext == null) {
+                treeContext = treeSrc;
+            }
+
+            ITree dst = null;
+            TreeContext treeDst = null;
+            try {
+                treeDst = Generators.getInstance().getTree(afterMethodContentPath);
+                dst = treeDst.getRoot();
+            } catch (Exception e) {
+                e.printStackTrace();
+                continue;
+            }
+
+            // Match
+            Matcher m = Matchers.getInstance().getMatcher(src, dst); // retrieve the default matcher
+            try {
+                m.match();
+            } catch (NullPointerException e) {
+                System.out.println("Cannot match: NullPointerException in m.match()");
+                break;
+            }
+
+
+            ActionGenerator allFileGen = new ActionGenerator(src, dst, m.getMappings());
+            allFileGen.generate();
+            List<Action> allActions = allFileGen.getActions();
+
+            addNgramsToSet(allActions, Integer.toString(i), Integer.toString(i),
+                    "sampleChange1.java", USE_SAVED_ACTIONS);
+        }
+
+        if (CALCULATE_HISTS) {
+            saveHists(treeContext);
+        }
+    }
+
+    //private static String RESULTS_FOR_HIST_DIR = "/Volumes/Seagate/Alina/result_for_hist_all_data3-50-1gram";
+    // TODO: Uncomment
+    private static boolean JUST_TESTING = true;
+
+    /*
+     This main calculates edit script another way. It extracts each method ("before" and "after") to separate file and
+     run gumtree algorithm on these two files instead of running gumtree on original files.
+    */
+
+    public static void mainMOST(String[] args) throws IOException, GitAPIException {
+        Run.initGenerators();
+
+        TreeContext treeContext = null;
+
+        if (USE_SAVED_ACTIONS) {
+            treeContext = getTreeContext();
+        }
+
+        File patternsDir = new File(PATTERNS_PATH);
+        File[] size_dirs = Arrays.stream(patternsDir.listFiles()).filter(file -> isNumeric(file.getName())).toArray(File[]::new);
+        Arrays.sort(size_dirs, Comparator.comparingInt(o -> Integer.parseInt(o.getName())));
+
+        boolean if_break = false;
+
+        for (File size_dir : size_dirs) {
+            if (if_break) {
+                break;
+            }
+
+            // TODO: UNCOMMENT WHILE CALCULATING HISTS
+            if (CALCULATE_HISTS) {
+                if (!(consideredPatternsA <= Integer.parseInt(size_dir.getName()) &&
+                        Integer.parseInt(size_dir.getName()) <= consideredPatternsB)) {
+                    continue;
+                }
+            }
+
+            File[] id_dirs = Arrays.stream(size_dir.listFiles()).filter(file -> isNumeric(file.getName())).toArray(File[]::new);
+            Arrays.sort(id_dirs, Comparator.comparingInt(o -> Integer.parseInt(o.getName())));
+
+            int num_processed = 0;
+
+            for (File id_dir : id_dirs) {
+                // Too long calculation
+                /*if (id_dir.getName().equals("6520")) {
+                    continue;
+                }
+                if (id_dir.getName().equals("10518")) {
+                    continue;
+                }
+                if (id_dir.getName().equals("12342")) {
+                    continue;
+                }*/
+
+                num_processed++;
+
+                if (if_break) {
+                    break;
+                }
+
+                File[] files = id_dir.listFiles();
+
+                for (File file : files) {
+                    if (if_break) {
+                        break;
+                    }
+
+                    if (!file.getName().startsWith("sampleChange") || file.getName().equals("sampleChange.html")) {
+                        continue;
+                    }
+
+                    if (size_dir.getName().equals("3") && id_dir.getName().equals("192") &&
+                            file.getName().startsWith("sampleChange3")) {
+                        continue;
+                    }
+
+                    System.out.println("\n\n\n" + size_dir.getName() + " " + id_dir.getName());
+                    System.out.println("FILE: " + file.getName());
+
+                    //
+                    //
+                    //
+                    //
+                    // TODO: DELETE WHILE CALCULATING HISTS !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                    if (!CALCULATE_HISTS) {
+                        String filename = file.getName();
+                        File curActionFile = new File(ACTIONS_DIR_PATH + "/" +
+                                size_dir.getName() + "/" + id_dir.getName() + "/" + filename.substring(0, filename.length() - 5));
+                        if (curActionFile.exists()) {
+                            System.out.println("EDIT SCRIPT EXISTS!");
+                            continue;
+                        }
+                    }
+                    //
+                    //
+                    //
+                    //
+                    //
+
+                    if (USE_SAVED_ACTIONS) {
+                        // TODO: make correct calculation of num_changes.
+                        num_changes++;
+                        addNgramsToSet(null, size_dir.getName(), id_dir.getName(), file.getName(), true);
+                        continue;
+                    }
+
+                    String content = readAllBytesJava7(file.getAbsolutePath());
+                    int startInd = content.indexOf("<html><h3>") + "<html><h3>".length();
+                    int endInd = content.indexOf("</h3><h3>");
+
+                    String name = content.substring(startInd, endInd);
+                    String[] parts = name.split(",");
+                    String repoName = parts[parts.length - 1].trim();
+                    String commitName = parts[0];
+                    String fileName = parts[1];
+                    String methodName = parts[3];
+
+                    if (repoName.equals("apache/pig") && commitName.equals("19c9d91aa66d3b3d102dbf44437958f5b7957098"))
+                        commitName = "deb4a30b610806bb1b99bccd454811e77eafab90";
+                    if (repoName.equals("apache/pig") && commitName.equals("3adf82bbd8d6c324e5a09554f5064c316af071a3"))
+                        commitName = "dc0fa7b44b8ac83d8df4a0dac9f48eab76851148";
+                    if (repoName.equals("apache/pig") && commitName.equals("d1ea940063270199e57c5efde9fbf76912773c7a"))
+                        commitName = "6dc4f57f4b8592c1804df08891036ce1515b1f9a";
+                    if (repoName.equals("apache/pig") && commitName.equals("9e280062373d817221e2466ce1234741ad964f44"))
+                        commitName = "e9ff9c27c10c61362e8460b35af4b88b21ef8f15";
+
+                    GitConnector gc = new GitConnector(REPOS_PATH + "/" + repoName + "/.git");
+                    System.out.println(REPOS_PATH + "/" + repoName + "/.git");
+                    ArrayList<String> afterAndBefore = null;
+
+                    File fileBeforeSaved = new File(COMMIT_FILES_DIR + "/" +
+                            repoName + "/" + commitName + "/" + fileName.substring(0, fileName.length() - 5) + "_before.java");
+                    File fileAfterSaved = new File(COMMIT_FILES_DIR + "/" +
+                            repoName + "/" + commitName + "/" + fileName.substring(0, fileName.length() - 5) + "_after.java");
+
+                    System.out.println(fileBeforeSaved.getPath());
+                    System.out.println(fileAfterSaved.getPath());
+
+                    if (!fileBeforeSaved.exists() || !fileAfterSaved.exists()) {
+                        if (gc.connect()) {
+                            afterAndBefore = gc.getFileFromCommit(commitName, fileName);
+                            gc.close();
+                        } else {
+                            System.out.println("GitConnector is not connected");
+                        }
+                    } else {
+                        System.out.println("Files were saved.");
+
+                        afterAndBefore = new ArrayList<>();
+                        afterAndBefore.add(readAllBytesJava7(fileAfterSaved.getAbsolutePath()));
+                        afterAndBefore.add(readAllBytesJava7(fileBeforeSaved.getAbsolutePath()));
+                    }
+
+                    String afterContent = afterAndBefore.get(0).replace("\t", "    ")
+                            .replace("&gt;", ">")
+                            .replace("&lt;", "<");
+                    String beforeContent = afterAndBefore.get(1).replace("\t", "    ")
+                            .replace("&gt;", ">")
+                            .replace("&lt;", "<");
+
+                    File file_before = new File("tmp/file_before.java");
+                    file_before.createNewFile();
+                    try (PrintWriter out = new PrintWriter(file_before.getAbsolutePath())) {
+                        out.print(beforeContent);
+                    }
+                    ITree src = null;
+                    TreeContext treeSrc = null;
+                    try {
+                        treeSrc = Generators.getInstance().getTree(file_before.getPath());
+                        src = treeSrc.getRoot();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        continue;
+                    }
+
+                    if (treeContext == null) {
+                        treeContext = treeSrc;
+                    }
+
+                    File file_after = new File("tmp/file_after.java");
+                    file_after.createNewFile();
+                    try (PrintWriter out = new PrintWriter(file_after.getAbsolutePath())) {
+                        out.print(afterContent);
+                    }
+                    ITree dst = null;
+                    TreeContext treeDst = null;
+                    try {
+                        treeDst = Generators.getInstance().getTree(file_after.getPath());
+                        dst = treeDst.getRoot();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        continue;
+                    }
+
+
+                    if (size_dir.getName().equals("3") && id_dir.getName().equals("27") &&
+                            file.getName().equals("sampleChange3.html")) {
+                        try (PrintWriter out = new PrintWriter("tmp/src_tree_important")) {
+                            List<ITree> srcList = new ArrayList<>();
+                            src.preOrder().forEach(srcList::add);
+                            for (ITree iTree : srcList) {
+                                out.println(new String(new char[iTree.getDepth()]).replace('\0', '\t') +
+                                        iTree.toShortString() + "       -> " + iTree.getId());
+                            }
+                        }
+                        try (PrintWriter out = new PrintWriter("tmp/dst_tree_important")) {
+                            List<ITree> dstList = new ArrayList<>();
+                            dst.preOrder().forEach(dstList::add);
+                            for (ITree iTree : dstList) {
+                                out.println(new String(new char[iTree.getDepth()]).replace('\0', '\t') +
+                                        iTree.toShortString() + "       -> " + iTree.getId());
+                            }
+                        }
+                    }
+
+
+
+                    // Match
+                    Matcher m = Matchers.getInstance().getMatcher(src, dst); // retrieve the default matcher
+                    try {
+                        m.match();
+                    } catch (NullPointerException e) {
+                        System.out.println("Cannot match: NullPointerException in m.match()");
+                        if_break = true;
+                        break;
+                    }
+
+
+                    Pair<Integer, Integer> startIndsMethodsBeforeAfter =
+                            findMethodsStartIndices(methodName, src, dst, m.getMappings());
+
+                    Pair<Integer, Integer> startIndsForMethods = raiseNLinesUp(startIndsMethodsBeforeAfter, 4,
+                            beforeContent, afterContent);
+
+                    ArrayList<String> beforeAndAfterFragments = null;
+                    beforeAndAfterFragments = getFragments(content);
+
+                    Indices indicesBefore = getCorrectIndices(beforeContent, beforeAndAfterFragments.get(0),
+                            startIndsForMethods.getFirst());
+                    Indices indicesAfter = getCorrectIndices(afterContent, beforeAndAfterFragments.get(1),
+                            startIndsForMethods.getSecond());
+
+                    if (indicesBefore == null) {
+                        System.out.println("Before fragment wasn't found in file.");
+                        System.out.println("Before fragment:");
+                        System.out.println(beforeAndAfterFragments.get(0));
+                        //if_break = true;
+                        //break;
+                        FileWriter fileWriter = new FileWriter("NotFoundFragmentsSecondWay.txt", true);
+                        PrintWriter printWriter = new PrintWriter(fileWriter);
+                        printWriter.print(size_dir.getName() + " " + id_dir.getName() + " " + file.getName() + " " + "before" + "\n");
+                        printWriter.close();
+                        continue;
+                    }
+                    if (indicesAfter == null) {
+                        System.out.println("After fragment wasn't found in file.");
+                        System.out.println("After fragment:");
+                        System.out.println(beforeAndAfterFragments.get(1));
+                        FileWriter fileWriter = new FileWriter("NotFoundFragmentsSecondWay.txt", true);
+                        PrintWriter printWriter = new PrintWriter(fileWriter);
+                        printWriter.print(size_dir.getName() + " " + id_dir.getName() + " " + file.getName() + " " + "after" + "\n");
+                        printWriter.close();
+                        continue;
+                        //if_break = true;
+                        //break;
+                    }
+
+                    //System.out.println(beforeContent.substring(indicesBefore.start, indicesBefore.end));
+
+                    ITree beforeNode = findMinCoverNode(src, indicesBefore.start, indicesBefore.end);
+                    if (beforeNode == null) {
+                        System.out.println("beforeNode is NULL " + file.getName());
+                        //if_break = true;
+                        //break;
+                        continue;
+                    }
+
+                    ITree afterNode = findMinCoverNode(dst, indicesAfter.start, indicesAfter.end);
+                    if (afterNode == null) {
+                        System.out.println("afterNode is NULL " + file.getName());
+                        //if_break = true;
+                        //break;
+                        continue;
+                    }
+
+
+
+                    Pair<ITree, String> methodBeforePair = getCorrespondingMethodDeclarationNode(beforeNode);
+                    if (methodBeforePair.getFirst() == null) {
+                        System.out.println("methodNodeBefore is null");
+                        if_break = true;
+                        break;
+                    }
+                    Pair<ITree, String> methodAfterPair = getCorrespondingMethodDeclarationNode(afterNode);
+                    if (methodAfterPair.getFirst() == null) {
+                        System.out.println("methodNodeAfter is null");
+                        if_break = true;
+                        break;
+                    }
+
+                    System.out.println("Method before: " + methodBeforePair.getSecond());
+                    System.out.println("Method after: " + methodAfterPair.getSecond());
+                    System.out.println("Real method name: " + methodName);
+
+                    if (!methodBeforePair.getSecond().equals(methodAfterPair.getSecond())) {
+                        System.out.println("\nmethod BEFORE != method AFTER !!!!!!");
+                        //if_break = true;
+                        //break;
+                    }
+                    if (!methodBeforePair.getSecond().equals(methodName)) {
+                        System.out.println("\nmethod BEFORE != REAL methodName !!!!!!");
+                        //if_break = true;
+                        //break;
+                    }
+
+
+                    if (JUST_TESTING) {
+                        continue;
+                    }
+
+
+                    try (PrintWriter out = new PrintWriter("tmp/before_node")) {
+                        out.print(beforeNode.toTreeString());
+                    }
+
+                    try (PrintWriter out = new PrintWriter("tmp/after_node")) {
+                        out.print(afterNode.toTreeString());
+                    }
+
+                    try (PrintWriter out = new PrintWriter("tmp/src_tree")) {
+                        out.print(src.toTreeString());
+                    }
+                    try (PrintWriter out = new PrintWriter("tmp/dst_tree")) {
+                        out.print(dst.toTreeString());
+                    }
+
+
+                    ActionGenerator allFileGen = new ActionGenerator(src, dst, m.getMappings());
+                    allFileGen.generate();
+
+
+                    BeforeAfterNodes nodes = getBeforeAfterNodes(m,
+                            indicesBefore.start, indicesBefore.end, indicesAfter.start, indicesAfter.end,
+                            beforeContent, afterContent);
+
+                    ITree nodeBeforeRaw = nodes.rawBefore;
+                    ITree nodeAfterRaw = nodes.rawAfter;
+
+                    List<Action> allActions = allFileGen.getActions();
+                    List<Action> extractedActionsRaw = extractActions(allActions, nodeBeforeRaw, nodeAfterRaw);
+
+                    System.out.println("______________________________________");
+                    System.out.println("ACTIONS SIZE");
+                    System.out.println(extractedActionsRaw.size());
+
+
+                    try {
+                        System.out.println("\nActions retrieved in the third (raw) way:");
+                        for (Action action : extractedActionsRaw) {
+                            /*System.out.println(action.getNode().toPrettyString(treeDst) + " | " +
+                                    action.getNode().getId() + " | " + action.getNode().getType() + " | " + action.format(treeSrc));*/
+                            System.out.println(action.toString());
+                            //System.out.println(action.format(treeSrc));
+                            //System.out.println(action.getNode().toTreeString());
+                            //System.out.println(action.getName() + " " + action.getNode().toShortString());
+                        }
+
+                    } catch (NullPointerException e) {
+                        System.out.println("\nActions retrieved in the third (raw) way:");
+                        for (Action action : extractedActionsRaw) {
+                            /*System.out.println(action.getNode().toPrettyString(treeDst) + " | " +
+                                    action.getNode().getId() + " | " + action.getNode().getType() + " | " + action.format(treeSrc));*/
+                            System.out.println(action.toString());
+                            //System.out.println(action.format(treeSrc));
+                            //System.out.println(action.getNode().toTreeString());
+                            //System.out.println(action.getName() + " " + action.getNode().toShortString());
+                        }
+
+                        if_break = true;
+                        break;
+                        //continue;
+                    }
+
+                    num_changes++;
+                    addNgramsToSet(extractedActionsRaw, size_dir.getName(), id_dir.getName(), file.getName(), false);
+                }
+            }
+
+        }
+
+        System.out.println("\n\n\nNUM CHANGES: " + num_changes);
+
+        if (CALCULATE_HISTS) {
+            saveHists(treeContext);
+        }
+    }
+
+    // TODO!!!
+    private static Pair<Integer, Integer> raiseNLinesUp(Pair<Integer, Integer> startIndsMethodsBeforeAfter, int n,
+                                                        String beforeContent, String afterContent) {
+        String[] linesBefore = beforeContent.split("\n");
+        String[] linesAfter = afterContent.split("\n");
+
+        List<Integer> linesStartIndsBefore = new ArrayList<>();
+        List<Integer> linesStartIndsAfter = new ArrayList<>();
+
+        int curLineStartInd = 0;
+        int i;
+        for (i = 0; i < linesBefore.length; i++) {
+            linesStartIndsBefore.add(curLineStartInd);
+            if (startIndsMethodsBeforeAfter.getFirst() <= curLineStartInd + linesBefore[i].length()) {
+                break;
+            }
+            curLineStartInd += linesBefore[i].length() + 1;
+        }
+
+        curLineStartInd = 0;
+        int j;
+        for (j = 0; j < linesAfter.length; j++) {
+            linesStartIndsAfter.add(curLineStartInd);
+            if (startIndsMethodsBeforeAfter.getSecond() <= curLineStartInd + linesAfter[j].length()) {
+                break;
+            }
+            curLineStartInd += linesAfter[j].length() + 1;
+        }
+
+        Integer finalIndBefore = linesStartIndsBefore.get(Math.max(0, linesStartIndsBefore.size() - 1 - n));
+        Integer finalIndAfter = linesStartIndsAfter.get(Math.max(0, linesStartIndsAfter.size() - 1 - n));
+
+        return new Pair<>(finalIndBefore, finalIndAfter);
+    }
+
+    /*
+        Finds method BEFORE by name and then tries to find mapping to corresponding method AFTER.
+     */
+    private static Pair<Integer, Integer> findMethodsStartIndices(String methodName, ITree src, ITree dst, MappingStore m) throws FileNotFoundException {
+        List<ITree> treesBefore = src.getTrees();
+        ITree beforeMethodNode = null;
+        ITree simpleNameNodeBefore = null;
+        ITree afterMethodNode = null;
+        ITree simpleNameNodeAfter = null;
+
+        for (ITree tree : treesBefore) {
+            if (tree.getType() == 31) {
+                ITree simpleNameNode =
+                        tree.getChildren().stream().filter(c -> c.getType() == 42).collect(Collectors.toList()).get(0);
+                if (simpleNameNode.getLabel().equals(methodName)) {
+                    simpleNameNodeBefore = simpleNameNode;
+                    beforeMethodNode = tree;
+                    break;
+                }
+            }
+        }
+
+        afterMethodNode = m.getDst(beforeMethodNode);
+
+        if (afterMethodNode == null) {
+            simpleNameNodeAfter = m.getDst(simpleNameNodeBefore);
+
+            if (simpleNameNodeAfter == null) {
+                List<ITree> treesAfter = dst.getTrees();
+
+                for (ITree tree : treesAfter) {
+                    if (tree.getType() == 31) {
+                        ITree simpleNameNode =
+                                tree.getChildren().stream().filter(c -> c.getType() == 42).collect(Collectors.toList()).get(0);
+                        if (simpleNameNode.getLabel().equals(methodName)) {
+                            simpleNameNodeAfter = simpleNameNode;
+                            break;
+                        }
+                    }
+                }
+            }
+            afterMethodNode = simpleNameNodeAfter.getParent();
+        }
+
+        if (beforeMethodNode == null) {
+            System.out.println("BEFORE NODE IS NULL !!!");
+        }
+
+        if (afterMethodNode == null) {
+            System.out.println("Before ID: " + beforeMethodNode.getId());
+
+            System.out.println("\nMAPPINGS:");
+            for (Mapping mapping : m.asSet()) {
+                System.out.println(mapping.first.getId() + " -> " + mapping.second.getId());
+            }
+            System.out.println("\n");
+
+            try (PrintWriter out = new PrintWriter("tmp/src_tree_preorder_last")) {
+                List<ITree> srcList = new ArrayList<>();
+                src.preOrder().forEach(srcList::add);
+                for (ITree iTree : srcList) {
+                    out.println(new String(new char[iTree.getDepth()]).replace('\0', '\t') +
+                            iTree.toShortString() + "       -> " + iTree.getId());
+                }
+            }
+            try (PrintWriter out = new PrintWriter("tmp/dst_tree_preorder_last")) {
+                List<ITree> dstList = new ArrayList<>();
+                dst.preOrder().forEach(dstList::add);
+                for (ITree iTree : dstList) {
+                    out.println(new String(new char[iTree.getDepth()]).replace('\0', '\t') +
+                            iTree.toShortString() + "       -> " + iTree.getId());
+                }
+            }
+        }
+
+
+        ITree simpleNameAfter =
+                afterMethodNode.getChildren().stream().filter(c -> c.getType() == 42).collect(Collectors.toList()).get(0);
+
+        System.out.println("METHOD BEFORE NAME: " + methodName);
+        System.out.println("METHOD AFTER NAME: " + simpleNameAfter.getLabel());
+
+        return new Pair<>(beforeMethodNode.getPos(), afterMethodNode.getPos());
+    }
+
+    /*
+        Returns corresponding MethodDeclaration node and the name of the method.
+     */
+    private static Pair<ITree, String> getCorrespondingMethodDeclarationNode(ITree beforeNode) {
+        ITree methodDeclarationNode = beforeNode;
+
+        while (methodDeclarationNode != null && methodDeclarationNode.getType() != 31) {
+            methodDeclarationNode = methodDeclarationNode.getParent();
+        }
+
+        if (methodDeclarationNode == null) {
+            return new Pair<>(null, null);
+        }
+
+        String methodName = null;
+
+        for (ITree child : methodDeclarationNode.getChildren()) {
+            if (child.getType() == 42) {
+                methodName = child.getLabel();
+                break;
+            }
+        }
+
+        return new Pair<>(methodDeclarationNode, methodName);
+    }
+
     public static void main3(String[] args) throws IOException, GitAPIException {
         Run.initGenerators();
 
@@ -1106,8 +2288,8 @@ public class Main {
                     ArrayList<String> beforeAndAfterFragments = null;
                     beforeAndAfterFragments = getFragments(content);
 
-                    Indices indicesBefore = getCorrectIndices(beforeContent, beforeAndAfterFragments.get(0));
-                    Indices indicesAfter = getCorrectIndices(afterContent, beforeAndAfterFragments.get(1));
+                    Indices indicesBefore = getCorrectIndices(beforeContent, beforeAndAfterFragments.get(0), 0);
+                    Indices indicesAfter = getCorrectIndices(afterContent, beforeAndAfterFragments.get(1), 0);
 
                     if (indicesBefore == null || indicesAfter == null) {
                         if_break = true;
@@ -1330,6 +2512,85 @@ public class Main {
         return resultActions;
     }
 
+
+
+    private static List<Action> extractActionsWithOrdering(List<Action> allActions, ITree nodeBefore, ITree nodeAfter) {
+        List<Action> resultActions = new ArrayList<>();
+
+        Set<ITree> setBefore = new HashSet<>(nodeBefore.getTrees());
+        Set<ITree> setAfter = new HashSet<>(nodeAfter.getTrees());
+
+
+
+        System.out.println("\nBefore preOrder");
+        List<ITree> beforeList = new ArrayList<>();
+        //nodeBefore.breadthFirst().forEach(list::add);
+        nodeBefore.preOrder().forEach(beforeList::add);
+        for (ITree iTree : beforeList) {
+            System.out.println(new String(new char[iTree.getDepth()]).replace('\0', '\t') +
+                    iTree.toShortString() + "       -> " + iTree.getId());
+        }
+        System.out.println("\n");
+
+
+        System.out.println("\nAfter preOrder");
+        List<ITree> afterList = new ArrayList<>();
+        //nodeBefore.breadthFirst().forEach(list::add);
+        nodeAfter.preOrder().forEach(afterList::add);
+        for (ITree iTree : afterList) {
+            System.out.println(new String(new char[iTree.getDepth()]).replace('\0', '\t') +
+                    iTree.toShortString() + "       -> " + iTree.getId());
+        }
+        System.out.println("\n");
+
+
+/*
+        System.out.println("\n\nBefore trees:");
+
+        for (ITree iTree : setBefore) {
+            System.out.println(iTree.toShortString() + "       -> " + iTree.getId());
+        }
+
+        System.out.println("\nAfter trees:");
+
+        for (ITree iTree : setAfter) {
+            System.out.println(iTree.toShortString() + "       -> " + iTree.getId());
+        }
+
+        System.out.println("\n\n");
+*/
+        //Map<ITree, ArrayList<Action>> from
+
+        //System.out.println("DESCENDANTS: \n" + nodeAfter.getTrees().size());
+
+        for (Action action : allActions) {
+            //System.out.println("ACTION: " + action.toString());
+            //System.out.println(action.getNode().toTreeString());
+            
+            ITree nodeOfAction = action.getNode();
+
+            if (nodeOfAction.getLabel().equals("public")) {
+                System.out.println(nodeOfAction.getParent().toTreeString());
+            }
+
+            System.out.println(action.toString() + " -> " + action.getNode().getLabel());
+
+            if (setBefore.contains(nodeOfAction)) {
+                // Can only be MOV, UPD, DEL
+                //System.out.println(("BEFORE CONTAINS: " + action.toString()));
+                resultActions.add(action);
+            }
+
+            if (setAfter.contains(nodeOfAction)) {
+                // Can only be INS
+                //System.out.println(("AFTER CONTAINS: " + action.toString()));
+                resultActions.add(action);
+            }
+        }
+
+        return resultActions;
+    }
+
     public static void mainCheckGetOnlyBlackChanges(String[] args) {
         String s = "\t\tif (recipeType == null) {\n" +
                 "\t\t\treturn false;\n" +
@@ -1386,7 +2647,7 @@ public class Main {
         System.out.println("____________________________");*/
 
         // TODO: (JUST A NOTE) currently I don't need to match roots. That's why I return nulls.
-        return new BeforeAfterNodes(null, null, nodeBefore, nodeAfter);
+        //return new BeforeAfterNodes(null, null, nodeBefore, nodeAfter);
 
         //System.out.println("\nINDICES AND NODE INDICES:");
         //System.out.println(start_ind_before + " " + end_ind_before);
@@ -1417,7 +2678,7 @@ public class Main {
         //System.out.println("FIRST MAPPED PARENT");
         //System.out.println(store.firstMappedSrcParent(nodeBefore).toTreeString());
 
-        /*int cur_num = 0;
+        int cur_num = 0;
 
         for (ITree i = nodeBefore; i != null; i = i.getParent()) {
             //System.out.println("CURRENT\n " + i.toTreeString());
@@ -1432,6 +2693,7 @@ public class Main {
             int steps = 0;
 
             for (ITree j = nodeAfter; j != null; j = j.getParent()) {
+                /*
                 if (cur_num < 2 && steps < 2) {
                     System.out.println("J:");
                     System.out.println(j.toTreeString());
@@ -1458,6 +2720,7 @@ public class Main {
                     System.out.println("FRAGMENT - 200:\n" + file_after.substring(store.getDst(i).getPos() - 200, store.getDst(i).getEndPos()));
                     System.out.println("\n");
                 }
+                */
 
                 steps++;
 
@@ -1471,7 +2734,7 @@ public class Main {
 
             cur_num ++;
         }
-*/
+
 
         /*for (ITree i = nodeBefore; i != null; i = i.getParent()) {
             for (ITree j = nodeAfter; j != null; j = j.getParent()) {
@@ -1490,6 +2753,8 @@ public class Main {
         }*/
 
         //return null;
+
+        return new BeforeAfterNodes(null, null, nodeBefore, nodeAfter);
     }
 
 
@@ -1825,6 +3090,7 @@ public class Main {
 
     public static String PATTERNS_PATH = "/Users/aliscafo/Downloads/CPatMiner-master 2/SemanticChangeGraphMiner/output/patterns/repos-hybrid/1";
     public static String REPOS_PATH = "/Volumes/Transcend/Alina/repos";
+    //public static String REPOS_PATH = "/Volumes/Seagate/Alina/repos";
 
     public static void main1(String[] args) throws IOException, GitAPIException {
         Run.initGenerators();
@@ -2118,6 +3384,12 @@ public class Main {
                                 LinkedHashMap::new));
 
         List<Map.Entry<String, Integer>> commonStats = new ArrayList<>(sorted.entrySet());
+        Map<String, Integer> editScriptToInd = new HashMap<>();
+        for (int i = 0; i < commonStats.size(); i++) {
+            String editScript = commonStats.get(i).getKey();
+            System.out.println("Putting editScript to editScriptToInd... " + i + "/" + commonStats.size());
+            editScriptToInd.put(editScript, i);
+        }
 
         File editScriptsFileUnmapped = new File(RESULTS_FOR_HIST_DIR + "/" + "edit_scripts_" + NGRAM + "grams_unmapped.txt");
         editScriptsFileUnmapped.getParentFile().mkdirs();
@@ -2128,6 +3400,7 @@ public class Main {
         for (Map.Entry<String, Integer> entry : sorted.entrySet()) {
             String key = entry.getKey();
             Integer value = entry.getValue();
+            System.out.println("Writing unmapped es to file... " + num);
             editScriptsWriterUnmapped.write(num + ") " + key + " = " + value + "\n");
             num++;
         }
@@ -2142,6 +3415,7 @@ public class Main {
         for (Map.Entry<String, Integer> entry : sorted.entrySet()) {
             String key = mapWithContext(entry.getKey(), treeContext);
             Integer value = entry.getValue();
+            System.out.println("Writing mapped es to file... " + num);
             editScriptsWriterMapped.write(num + ") " + key + " = " + value + "\n");
             num++;
         }
@@ -2157,6 +3431,7 @@ public class Main {
         patternsListWriter.write("NUM PATTERNS: " + all_patterns_list.size() + "\n");
         num = 0;
         for (String pattern : all_patterns_list) {
+            System.out.println("Writing list of patterns to file... " + num);
             patternsListWriter.write(num + ") " + pattern + "\n");
             num++;
         }
@@ -2174,17 +3449,33 @@ public class Main {
             BufferedWriter histWriter = new BufferedWriter(new FileWriter(pattern_hist_file.getAbsolutePath()));
 
             Map<String, Integer> hist = entry.getValue();
-            //editScriptsWriter.write(num + ") " + key + " = " + value + "\n");
-            for (Map.Entry<String, Integer> commonStatsEntry: commonStats) {
+
+            /*for (Map.Entry<String, Integer> commonStatsEntry: commonStats) {
                 String ngram = commonStatsEntry.getKey();
                 histWriter.write(hist.getOrDefault(ngram, 0) + " ");
+            }*/
+
+            List<Pair<Integer, Integer>> sparseHist = new ArrayList<>();
+
+            for (Map.Entry<String, Integer> histElem : hist.entrySet()) {
+                Integer editScriptInd = editScriptToInd.getOrDefault(histElem.getKey(), -1);
+                Integer height = histElem.getValue();
+                sparseHist.add(new Pair<>(editScriptInd, height));
+            }
+
+            sparseHist.sort(Comparator.comparingInt(Pair::getFirst));
+
+            System.out.println("Writing hist to file... Pattern: " + pattern);
+
+            for (Pair pair : sparseHist) {
+                histWriter.write(pair.getFirst() + " " + pair.getSecond() + "\n");
             }
 
             histWriter.close();
         }
 
 
-
+/*
         for (Map.Entry<String, Map<String, Integer>> entry : from_pattern_to_hist.entrySet()) {
             String pattern = entry.getKey();
 
@@ -2194,7 +3485,6 @@ public class Main {
             BufferedWriter histWriter = new BufferedWriter(new FileWriter(pattern_hist_file.getAbsolutePath()));
 
             Map<String, Integer> hist = entry.getValue();
-            //editScriptsWriter.write(num + ") " + key + " = " + value + "\n");
             for (Map.Entry<String, Integer> commonStatsEntry: commonStats) {
                 String ngram = commonStatsEntry.getKey();
                 histWriter.write(hist.getOrDefault(ngram, 0) + " ");
@@ -2202,7 +3492,7 @@ public class Main {
 
             histWriter.close();
         }
-
+*/
 
 
         for (Map.Entry<String, Map<String, Integer>> entry : from_sample_to_hist.entrySet()) {
@@ -2213,22 +3503,39 @@ public class Main {
 
             File sample_hist_file = new File(RESULTS_FOR_HIST_DIR + "/" + pattern +
                     "/" + NGRAM + "gram" + "/" + sample_name + "_hist.txt");
+
+            System.out.println("Sample: " + sample + " to file " + sample_hist_file.getAbsolutePath());
+
             sample_hist_file.getParentFile().mkdirs();
             sample_hist_file.createNewFile();
             BufferedWriter histWriter = new BufferedWriter(new FileWriter(sample_hist_file.getAbsolutePath()));
 
             Map<String, Integer> hist = entry.getValue();
-            //editScriptsWriter.write(num + ") " + key + " = " + value + "\n");
-            for (Map.Entry<String, Integer> commonStatsEntry: commonStats) {
+
+            /*for (Map.Entry<String, Integer> commonStatsEntry: commonStats) {
                 String ngram = commonStatsEntry.getKey();
                 histWriter.write(hist.getOrDefault(ngram, 0) + " ");
+            }*/
+
+            List<Pair<Integer, Integer>> sparseHist = new ArrayList<>();
+
+            for (Map.Entry<String, Integer> histElem : hist.entrySet()) {
+                Integer editScriptInd = editScriptToInd.getOrDefault(histElem.getKey(), -1);
+                Integer height = histElem.getValue();
+                sparseHist.add(new Pair<>(editScriptInd, height));
+            }
+
+            sparseHist.sort(Comparator.comparingInt(Pair::getFirst));
+
+            for (Pair pair : sparseHist) {
+                histWriter.write(pair.getFirst() + " " + pair.getSecond() + "\n");
             }
 
             histWriter.close();
         }
 
 
-
+/*
         for (Map.Entry<String, Map<String, Integer>> entry : from_edit_script_to_hist.entrySet()) {
             String seq = entry.getKey();
 
@@ -2244,7 +3551,7 @@ public class Main {
             }
 
             histWriter.close();
-        }
+        }*/
     }
 
 
@@ -2277,7 +3584,7 @@ public class Main {
         return String.join(" ", result);
     }
 
-    private static String ACTIONS_DIR_PATH = "/Users/aliscafo/Documents/ALINA/WORK/SPbAU/thesis/CodeDiffEditScripts/saved_actions";
+    //private static String ACTIONS_DIR_PATH = "/Users/aliscafo/Documents/ALINA/WORK/SPbAU/thesis/CodeDiffEditScripts/saved_actions_new_way";
 
     public static void saveActionsToFiles(List<String> actions_raw_str, List<String> actions_str,
                                           String size_dir, String id_dir, String filename) throws IOException {
@@ -2316,7 +3623,8 @@ public class Main {
         return new ArrayList<String>(Arrays.asList(actionStr));
     }
 
-    public static void addNgramsToSet(List<Action> actions, String size_dir, String id_dir, String filename, boolean getSaved) throws IOException {
+    public static void addNgramsToSet(List<Action> actions, String size_dir, String id_dir, String filename,
+                                      boolean getSaved) throws IOException {
         //String location = size_dir + " " + id_dir + " " + filename;
 
         String pattern = size_dir + " " + id_dir;
@@ -2333,11 +3641,20 @@ public class Main {
         } else {
 
             for (Action action : actions) {
-                actions_str_raw.add(action.toString());
-                actions_str.add(clean(action.toString()));
+                if (USE_PARENTS && action.getName().equals("DEL")) {
+                    actions_str_raw.add(action.toString() + " " + action.getNode().getParent().getType() + "@@");
+                    actions_str.add(clean(action.toString()) + " " + action.getNode().getParent().getType() + "@@");
+                } else {
+                    actions_str_raw.add(action.toString());
+                    actions_str.add(clean(action.toString()));
+                }
             }
 
             saveActionsToFiles(actions_str_raw, actions_str, size_dir, id_dir, filename);
+        }
+
+        if (!CALCULATE_HISTS) {
+            return;
         }
 
         /*List<String> actions_str = new ArrayList<>();
@@ -2353,9 +3670,35 @@ public class Main {
         int num_actions = actions_str.size();
         int n = NGRAM;
 
-        //while (n <= num_actions && n <= 15) {
         while (n <= NGRAM) {
             int i = 0;
+
+            // Adding small edit scripts
+            if (i + n > num_actions && TREAT_SMALL_SCRIPTS_AS_NGRAM) {
+                String seq = String.join(" ", actions_str.subList(i, num_actions));
+                if (!ngrams_stats.containsKey(seq)) {
+                    ngrams_stats.put(seq, 0);
+                }
+                int count = ngrams_stats.get(seq);
+                ngrams_stats.replace(seq, count + 1);
+
+                if (true) {
+                    Map<String, Integer> hist = from_pattern_to_hist.getOrDefault(pattern, new HashMap<>());
+                    hist.merge(seq, 1, Integer::sum);
+                    from_pattern_to_hist.put(pattern, hist);
+
+                    String sample = pattern + " " + filename.substring(0, filename.length() - 5);
+                    Map<String, Integer> histOfSample = from_sample_to_hist.getOrDefault(sample, new HashMap<>());
+                    histOfSample.merge(seq, 1, Integer::sum);
+                    from_sample_to_hist.put(sample, histOfSample);
+                }
+
+                if (consideredEditScripts.contains(seq)) {
+                    Map<String, Integer> hist = from_edit_script_to_hist.getOrDefault(seq, new HashMap<>());
+                    hist.merge(pattern, 1, Integer::sum);
+                    from_edit_script_to_hist.put(seq, hist);
+                }
+            }
 
             while (i + n <= num_actions) {
                 String seq = String.join(" ", actions_str.subList(i, i + n));
@@ -2365,7 +3708,8 @@ public class Main {
                 int count = ngrams_stats.get(seq);
                 ngrams_stats.replace(seq, count + 1);
 
-                if (consideredPatterns.contains(pattern)) {
+                //if (consideredPatterns.contains(pattern)) {
+                if (true) {
                     Map<String, Integer> hist = from_pattern_to_hist.getOrDefault(pattern, new HashMap<>());
                     //hist.put(seq, hist.getOrDefault(seq, 0) + 1);
                     hist.merge(seq, 1, Integer::sum);
@@ -2408,14 +3752,14 @@ public class Main {
     }
 
     // Removes \n from start and end.
-    public static String strip(String str) {
+    public static String strip(String str, Character ch) {
         int i = 0;
-        while (str.charAt(i) == '\n') {
+        while (str.charAt(i) == ch) {
             i++;
         }
 
         int j = str.length() - 1;
-        while (str.charAt(j) == '\n') {
+        while (str.charAt(j) == ch) {
             j--;
         }
 
@@ -2439,7 +3783,7 @@ public class Main {
                 .replace("\t", "    ")
                 .replace("&gt;", ">")
                 .replace("&lt;", "<");
-        before = strip(before);
+        before = strip(before, '\n');
 
         String after = content.substring(start2, end2)
                 //.replace("<a id=\"change\">", "")
@@ -2447,7 +3791,7 @@ public class Main {
                 .replace("\t", "    ")
                 .replace("&gt;", ">")
                 .replace("&lt;", "<");
-        after = strip(after);
+        after = strip(after, '\n');
 
         fragments.add(before);
         fragments.add(after);
