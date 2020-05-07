@@ -32,7 +32,7 @@ public class Main {
     public static Map<String, ArrayList<String>> ngrams_locations_as_sub = new HashMap<>();
     public static Map<String, ArrayList<String>> ngrams_locations_full = new HashMap<>();
 
-    public static Map<String, Map<String, Integer>> from_pattern_to_hist = new HashMap<>();
+    //public static Map<String, Map<String, Integer>> from_pattern_to_hist = new HashMap<>();
     public static Map<String, Map<String, Integer>> from_sample_to_hist = new HashMap<>();
     public static Map<String, Map<String, Integer>> from_edit_script_to_hist = new HashMap<>();
 
@@ -52,14 +52,14 @@ public class Main {
     public static int num_changes = 0;
     public static int NUM_ACTIONS_THRESHOLD = 200;
 
-    public static int NGRAM = 11;
-    private static String RESULTS_FOR_HIST_DIR = "/Volumes/Seagate/Alina/result_for_lase_treat-false";
+    public static int NGRAM = 4;
+    private static String RESULTS_FOR_HIST_DIR = "/Volumes/Seagate/Alina/result_for_raw_tufano_with_UPD";
     private static boolean TREAT_SMALL_SCRIPTS_AS_NGRAM = false;
     private static boolean CALCULATE_HISTS = true;
     private static boolean USE_SAVED_ACTIONS = true;
     private static boolean USE_PARENTS = true;
     private static String ACTIONS_DIR_PATH =
-            "/Users/aliscafo/Documents/ALINA/WORK/SPbAU/thesis/CodeDiffEditScripts/LaseActions";
+            "/Users/aliscafo/Documents/ALINA/WORK/SPbAU/thesis/CodeDiffEditScripts/RawTufanoActions24kWithUPD";
 
     public static void dfs(ITree node/*, List<ITree> visited*/) {
         List<ITree> children = node.getChildren();
@@ -73,7 +73,7 @@ public class Main {
         }
     }
 
-    private static String readAllBytesJava7(String filePath)
+    public static String readAllBytesJava7(String filePath)
     {
         String content = "";
         try
@@ -1546,7 +1546,7 @@ public class Main {
     /*
      For Lase dataset.
      */
-    public static void main(String[] args) throws IOException {
+    public static void mainLase(String[] args) throws IOException {
         Run.initGenerators();
 
         TreeContext treeContext = null;
@@ -1616,6 +1616,253 @@ public class Main {
             saveHists(treeContext);
         }
     }
+
+
+
+
+
+
+    // RAW TUFANO DATASET
+    private static String PATH_TO_RAW_ANDROID = "/Users/aliscafo/Downloads/android 2";
+    private static String PATH_TO_RAW_GOOGLE = "/Users/aliscafo/Downloads/google 2";
+    private static String PATH_TO_RAW_OVIRT = "/Users/aliscafo/Downloads/ovirt 2";
+
+    private static String PATH_TO_RAW_TUFANO_DATASET =
+            "/Users/aliscafo/Documents/ALINA/WORK/SPbAU/thesis/CodeDiffEditScripts/RawTufanoDataset24k";
+
+    //private static String PATH_TO_RAW_TUFANO_DATASET = "/Volumes/Seagate/Alina/RawTufanoDataset";
+
+    private static Map<String, Integer> labeledDataset = new HashMap<>();
+    private static Set<String> foundLabeledDataset = new HashSet<>();
+
+    private static int GLOBAL_DATASET_ID = 1;
+
+    private static void addLabeledMethodsToMap() {
+        File labeledTufano = new File(PATH_TO_TUFANO_DATASET);
+        File[] dirs = Arrays.stream(labeledTufano.listFiles()).filter(file -> isNumeric(file.getName())).toArray(File[]::new);
+        Arrays.sort(dirs, Comparator.comparingInt(o -> Integer.parseInt(o.getName())));
+
+        for (File dir : dirs) {
+            String contentBefore = readAllBytesJava7(dir.getAbsolutePath() + "/before.java");
+            String contentAfter = readAllBytesJava7(dir.getAbsolutePath() + "/after.java");
+
+            contentBefore = strip(contentBefore, '\n');
+            contentAfter = strip(contentAfter, '\n');
+
+            String pair = contentBefore + " <SEP> " + contentAfter;
+
+            labeledDataset.put(pair, Integer.parseInt(dir.getName()));
+
+            //System.out.println("|" + pair + "|");
+        }
+    }
+
+    // Saving a part of raw dataset to process.
+    private static void processRepo(String pathToRepo) throws FileNotFoundException {
+        int processed = 0;
+        int MAX_PROCESSED = 8000;
+
+        Set<String> uniqueChanges = new HashSet<>();
+
+        File repo = new File(pathToRepo);
+        File[] dirs = Arrays.stream(repo.listFiles()).filter(file -> isNumeric(file.getName())).toArray(File[]::new);
+        Arrays.sort(dirs, Comparator.comparingInt(o -> Integer.parseInt(o.getName())));
+
+        for (File pr : dirs) {
+
+            File prPath = new File(pathToRepo + "/" + pr.getName());
+            File[] file_dirs = Arrays.stream(prPath.listFiles()).filter(file -> isNumeric(file.getName())).toArray(File[]::new);
+            Arrays.sort(file_dirs, Comparator.comparingInt(o -> Integer.parseInt(o.getName())));
+
+            for (File fileDir : file_dirs) {
+
+                File filePath = new File(pathToRepo + "/" + pr.getName() + "/" + fileDir.getName());
+                File[] method_dirs = Arrays.stream(filePath.listFiles()).filter(file -> isNumeric(file.getName())).toArray(File[]::new);
+                Arrays.sort(method_dirs, Comparator.comparingInt(o -> Integer.parseInt(o.getName())));
+
+                for (File methodDir : method_dirs) {
+                    boolean containsLabeled = false;
+                    boolean isUnique = true;
+
+                    File beforeFile = new File(methodDir.getAbsolutePath() + "/before.java");
+                    File afterFile = new File(methodDir.getAbsolutePath() + "/after.java");
+
+                    if (!beforeFile.exists() || !afterFile.exists()) {
+                        continue;
+                    }
+
+                    String beginningFile = "class Example {\n" +
+                            "\n\n";
+                    String endingFile = "\n\n" +
+                            "}";
+
+                    String contentBefore = readAllBytesJava7(beforeFile.getAbsolutePath());
+                    String contentAfter = readAllBytesJava7(afterFile.getAbsolutePath());
+                    contentBefore = beginningFile + strip(contentBefore, '\n') + endingFile;
+                    contentAfter = beginningFile + strip(contentAfter, '\n') + endingFile;
+
+                    String pair = contentBefore + " <SEP> " + contentAfter;
+
+                    if (uniqueChanges.contains(pair)) {
+                        isUnique = false;
+                    } else {
+                        uniqueChanges.add(pair);
+                    }
+
+                    if (labeledDataset.containsKey(pair)) {
+                        foundLabeledDataset.add(pair);
+                        containsLabeled = true;
+                    }
+
+                    if (isUnique && (processed < MAX_PROCESSED || containsLabeled)) {
+                        File file_before = new File(PATH_TO_RAW_TUFANO_DATASET + "/" +
+                                GLOBAL_DATASET_ID + "/before.java");
+
+                        if (!file_before.exists()) {
+                            file_before.getParentFile().mkdirs();
+                        }
+
+                        try (PrintWriter out = new PrintWriter(file_before.getAbsolutePath())) {
+                            out.print(contentBefore);
+                        }
+
+                        File file_after = new File(PATH_TO_RAW_TUFANO_DATASET + "/" +
+                                GLOBAL_DATASET_ID + "/after.java");
+
+                        try (PrintWriter out = new PrintWriter(file_after.getAbsolutePath())) {
+                            out.print(contentAfter);
+                        }
+
+                        File source_file = new File(PATH_TO_RAW_TUFANO_DATASET + "/" +
+                                GLOBAL_DATASET_ID + "/source.java");
+
+                        try (PrintWriter out = new PrintWriter(source_file.getAbsolutePath())) {
+                            out.print(pathToRepo + "/" + pr.getName() + "/" +
+                                    fileDir.getName() + "/" + methodDir.getName());
+                        }
+
+                        if (containsLabeled) {
+                            File labeledID_file = new File(PATH_TO_RAW_TUFANO_DATASET + "/" +
+                                    GLOBAL_DATASET_ID + "/labeledID.java");
+
+                            try (PrintWriter out = new PrintWriter(labeledID_file.getAbsolutePath())) {
+                                out.print(labeledDataset.get(pair));
+                            }
+                        }
+
+                        GLOBAL_DATASET_ID++;
+                        processed++;
+                    }
+
+                    GLOBAL_ELEMENT_ID++;
+
+                    if (GLOBAL_ELEMENT_ID % 5000 == 0) {
+                        System.out.println(GLOBAL_ELEMENT_ID + " " + foundLabeledDataset.size());
+                        //System.out.println("|" + pair + "|");
+                    }
+                }
+            }
+        }
+    }
+
+    private static boolean SAVE_PART_OF_DATA = false;
+
+    /*
+     For raw Tufano dataset.
+     */
+    public static void main/*RawTufano*/(String[] args) throws IOException {
+        Run.initGenerators();
+
+        TreeContext treeContext = null;
+
+        if (SAVE_PART_OF_DATA) {
+            addLabeledMethodsToMap();
+
+            processRepo(PATH_TO_RAW_ANDROID);
+            System.out.println(GLOBAL_ELEMENT_ID);
+
+            processRepo(PATH_TO_RAW_GOOGLE);
+            System.out.println(GLOBAL_ELEMENT_ID);
+
+            processRepo(PATH_TO_RAW_OVIRT);
+            System.out.println(GLOBAL_ELEMENT_ID);
+
+            System.out.println("FOUND: " + foundLabeledDataset.size());
+        }
+
+        File repo = new File(PATH_TO_RAW_TUFANO_DATASET);
+        File[] dirs = Arrays.stream(repo.listFiles()).filter(file -> isNumeric(file.getName())).toArray(File[]::new);
+        Arrays.sort(dirs, Comparator.comparingInt(o -> Integer.parseInt(o.getName())));
+
+        for (File dir : dirs) {
+            File actionsFile = new File(ACTIONS_DIR_PATH + "/" + dir.getName());
+
+            /*
+            if (actionsFile.exists())
+                continue;
+            */
+
+            System.out.println(dir.getName());
+
+            if (USE_SAVED_ACTIONS && treeContext != null) {
+                addNgramsToSet(null, dir.getName(), dir.getName(),
+                        "sampleChange1.java", USE_SAVED_ACTIONS);
+            } else {
+                String beforeMethodContentPath = dir.getAbsolutePath() + "/before.java";
+
+                ITree src = null;
+                TreeContext treeSrc = null;
+                try {
+                    treeSrc = Generators.getInstance().getTree(beforeMethodContentPath);
+                    src = treeSrc.getRoot();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    continue;
+                }
+
+                if (treeContext == null) {
+                    treeContext = treeSrc;
+                }
+
+                String afterMethodContentPath = dir.getAbsolutePath() + "/after.java";
+
+                ITree dst = null;
+                TreeContext treeDst = null;
+                try {
+                    treeDst = Generators.getInstance().getTree(afterMethodContentPath);
+                    dst = treeDst.getRoot();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    continue;
+                }
+
+                // Match
+                Matcher m = Matchers.getInstance().getMatcher(src, dst); // retrieve the default matcher
+                try {
+                    m.match();
+                } catch (NullPointerException e) {
+                    System.out.println("Cannot match: NullPointerException in m.match()");
+                    break;
+                }
+
+
+                ActionGenerator allFileGen = new ActionGenerator(src, dst, m.getMappings());
+                allFileGen.generate();
+                List<Action> allActions = allFileGen.getActions();
+
+                for (Action action : allActions)
+                    System.out.println(action.toString());
+
+                addNgramsToSet(allActions, dir.getName(), dir.getName(),
+                        "sampleChange1.java", USE_SAVED_ACTIONS);
+            }
+        }
+
+        if (CALCULATE_HISTS) {
+            saveHists(treeContext);
+        }
+    }
+
 
     //private static String RESULTS_FOR_HIST_DIR = "/Volumes/Seagate/Alina/result_for_hist_all_data3-50-1gram";
     // TODO: Uncomment
@@ -3439,7 +3686,7 @@ public class Main {
 
 
 
-
+        /*
         for (Map.Entry<String, Map<String, Integer>> entry : from_pattern_to_hist.entrySet()) {
             String pattern = entry.getKey();
 
@@ -3450,10 +3697,10 @@ public class Main {
 
             Map<String, Integer> hist = entry.getValue();
 
-            /*for (Map.Entry<String, Integer> commonStatsEntry: commonStats) {
-                String ngram = commonStatsEntry.getKey();
-                histWriter.write(hist.getOrDefault(ngram, 0) + " ");
-            }*/
+            //for (Map.Entry<String, Integer> commonStatsEntry: commonStats) {
+            //    String ngram = commonStatsEntry.getKey();
+            //    histWriter.write(hist.getOrDefault(ngram, 0) + " ");
+            //}
 
             List<Pair<Integer, Integer>> sparseHist = new ArrayList<>();
 
@@ -3473,9 +3720,12 @@ public class Main {
 
             histWriter.close();
         }
+        */
 
 
-/*
+
+
+        /*
         for (Map.Entry<String, Map<String, Integer>> entry : from_pattern_to_hist.entrySet()) {
             String pattern = entry.getKey();
 
@@ -3492,10 +3742,14 @@ public class Main {
 
             histWriter.close();
         }
-*/
+        */
 
+        int processed = 0;
 
         for (Map.Entry<String, Map<String, Integer>> entry : from_sample_to_hist.entrySet()) {
+            System.out.println("Processed: " + processed + "/" + from_sample_to_hist.entrySet().size());
+            processed++;
+
             String sample = entry.getKey();
             String[] parts = sample.split(" ");
             String pattern = parts[0] + " " + parts[1];
@@ -3567,6 +3821,10 @@ public class Main {
 
             if (token.contains("@@")) {
                 String[] splitted = token.split("@@");
+
+                if (splitted.length == 0)
+                    continue;
+
                 if (isNumeric(splitted[0])) {
                     result.add(splitted[0] + "@@");
                 }
@@ -3641,7 +3899,7 @@ public class Main {
         } else {
 
             for (Action action : actions) {
-                if (USE_PARENTS && action.getName().equals("DEL")) {
+                if (USE_PARENTS && (action.getName().equals("DEL") || action.getName().equals("UPD") )) {
                     actions_str_raw.add(action.toString() + " " + action.getNode().getParent().getType() + "@@");
                     actions_str.add(clean(action.toString()) + " " + action.getNode().getParent().getType() + "@@");
                 } else {
@@ -3683,9 +3941,9 @@ public class Main {
                 ngrams_stats.replace(seq, count + 1);
 
                 if (true) {
-                    Map<String, Integer> hist = from_pattern_to_hist.getOrDefault(pattern, new HashMap<>());
-                    hist.merge(seq, 1, Integer::sum);
-                    from_pattern_to_hist.put(pattern, hist);
+                    //Map<String, Integer> hist = from_pattern_to_hist.getOrDefault(pattern, new HashMap<>());
+                    //hist.merge(seq, 1, Integer::sum);
+                    //from_pattern_to_hist.put(pattern, hist);
 
                     String sample = pattern + " " + filename.substring(0, filename.length() - 5);
                     Map<String, Integer> histOfSample = from_sample_to_hist.getOrDefault(sample, new HashMap<>());
@@ -3710,10 +3968,9 @@ public class Main {
 
                 //if (consideredPatterns.contains(pattern)) {
                 if (true) {
-                    Map<String, Integer> hist = from_pattern_to_hist.getOrDefault(pattern, new HashMap<>());
-                    //hist.put(seq, hist.getOrDefault(seq, 0) + 1);
-                    hist.merge(seq, 1, Integer::sum);
-                    from_pattern_to_hist.put(pattern, hist);
+                    //Map<String, Integer> hist = from_pattern_to_hist.getOrDefault(pattern, new HashMap<>());
+                    //hist.merge(seq, 1, Integer::sum);
+                    //from_pattern_to_hist.put(pattern, hist);
 
                     String sample = pattern + " " + filename.substring(0, filename.length() - 5);
                     Map<String, Integer> histOfSample = from_sample_to_hist.getOrDefault(sample, new HashMap<>());
