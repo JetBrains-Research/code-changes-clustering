@@ -22,16 +22,6 @@ public class Application {
     public static List<String> representationTypes = Arrays.asList("short_as_ngram", "concat");
 
     public static void main(String[] args) throws IOException {
-        args = new String[8];
-        args[0] = "represent";
-        args[1] = "/Users/aliscafo/Documents/ALINA/WORK/SPbAU/thesis/CodeDiffEditScripts/LaseDataset";
-        args[2] = "/Users/aliscafo/Documents/ALINA/WORK/SPbAU/thesis/СodeChangesRepresentation/LaseHists2";
-        args[3] = "concat";
-        args[4] = "3";
-        args[5] = "true";
-        args[6] = "true";
-        args[7] = "/Users/aliscafo/Documents/ALINA/WORK/SPbAU/thesis/СodeChangesRepresentation/LaseActionsTest2";
-
         if (args.length == 0) {
             System.out.println("Use command: represent");
             return;
