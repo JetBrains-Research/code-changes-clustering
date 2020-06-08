@@ -1,8 +1,0 @@
-		}
-
-		// log connection close
-		if (!isPrivate()) {
-			OOCSIServer.logConnection(getName(), "OOCSI", "client disconnected", new Date());
-		}
-
-		// remove this client
