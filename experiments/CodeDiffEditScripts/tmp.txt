@@ -1,0 +1,12 @@
+MethodInvocation | 432 | 32 | INS 32@@ to 16@@ at 1
+MethodInvocation | 456 | 32 | INS 32@@ to 16@@ at 1
+SimpleName: Integer | 424 | 42 | INS 42@@Integer to 32@@ at 0
+SimpleName: parseInt | 425 | 42 | INS 42@@parseInt to 32@@ at 1
+MethodInvocation | 420 | 32 | MOV 32@@ to 32@@ at 2
+SimpleName: Integer | 448 | 42 | INS 42@@Integer to 32@@ at 0
+SimpleName: parseInt | 449 | 42 | INS 42@@parseInt to 32@@ at 1
+MethodInvocation | 440 | 32 | MOV 32@@ to 32@@ at 2
+SimpleName: hashCode | 419 | 42 | UPD 42@@hashCode from hashCode to getAnnotation
+StringLiteral: "hash" | 430 | 45 | INS 45@@"hash" to 32@@ at 2
+SimpleName: hashCode | 439 | 42 | UPD 42@@hashCode from hashCode to getAnnotation
+StringLiteral: "hash" | 454 | 45 | INS 45@@"hash" to 32@@ at 2

@@ -1,0 +1,7 @@
+		}
+
+		// log connection close
+		OOCSIServer.logConnection(token, "OOCSI", "client disconnected", new Date());
+
+		// remove this client
+		protocol.unregister(SocketClient.this);
