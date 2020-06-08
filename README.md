@@ -50,5 +50,5 @@ foo@bar:~$ python3 cluster <path to representations> <algorithm> <parameter> <di
 ## Требования
 - Java 8
 - JDK 1.8
-- Python 3 (с библиотеками из requirements.txt)
+- Python 3
 
