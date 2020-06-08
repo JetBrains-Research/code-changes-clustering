@@ -32,6 +32,20 @@ foo@bar:~$ java -jar target/CodeChangesRepresentation-1.0-SNAPSHOT-jar-with-depe
 | if save or use saved edit scripts | Сохранение сценариев редактирования или использование сохранённых (если директория не пуста) для оптимизации времени работы. |
 | path for edit scripts | Путь для сохранения сценариев редактирования (или к сохранённым сценариям редактирования). |
 
+- **cluster**
+
+Кластеризация представлений.
+
+```console
+foo@bar:~$ python3 cluster <path to representations> <algorithm> <parameter> <distance function>
+```
+
+| | |
+|-|-|
+| path to representations | Путь к директории с полученными представлениями. |
+| algorithm | Алгоритм кластеризации. dbscan/hac_average/hac_complete. |
+| parameter | Параметр для алгоритма кластеризации. |
+| distance function | Функция расстояния. jaccard/canberra/cosine/pearson. |
 
 ## Требования
 - Java 8
